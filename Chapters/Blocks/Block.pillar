@@ -170,41 +170,28 @@ Let's look at it in detail. Figure *@fig:variable* shows the execution of the ex
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 @@important Non-local variables are looked up in the ''home context'' of the block (i.e., the method context that ''created'' the block) and not the context executing the block.
 
-!!! Experiment 2: Changing a variable value.
- Let's continue our experiments. The method \ct{setVariableAndDefineBlock2} shows that a non-local variable value can be changed during the evaluation of a block. Executing \ct{Bexp new setVariableAndDefineBlock2} prints 33, since 33 is the last value of the variable \ct{t}.
+!!! Experiment 2: Changing a variable value
+ Let's continue our experiments. The method ==setVariableAndDefineBlock2== shows that a non-local variable value can be changed during the evaluation of a block. Executing ==Bexp new setVariableAndDefineBlock2== prints 33, since 33 is the last value of the variable ==t==.
 
 
 [[[
-Bexp>>setVariableAndDefineBlock2
+Bexp >> setVariableAndDefineBlock2
 	| t |
 	t := 42.
 	self executeBlock: [ t := 33. t traceCr ]
 
 Bexp new setVariableAndDefineBlock2	
-	--> 33
+>>> 33
 ]]]
 
 
 !!!Experiment 3: Accessing a shared non-local variable.
-Two blocks can share a non-local variable and they can modify the value of this variable at different moments. To see this, let us define a new method \ct{setVariableAndDefineBlock3} as follows:
+Two blocks can share a non-local variable and they can modify the value of this variable at different moments. To see this, let us define a new method ==setVariableAndDefineBlock3== as follows:
 
 [[[
-Bexp>>setVariableAndDefineBlock3
+Bexp >> setVariableAndDefineBlock3
 	| t |
 	t := 42.
 	self executeBlock: [ t traceCr. t := 33. t traceCr ].
@@ -214,16 +201,114 @@ Bexp>>setVariableAndDefineBlock3
 
 [[[
 Bexp new setVariableAndDefineBlock3
-	--> 42
-	--> 33
-	--> 33
-	--> 66 
-	--> 66
+>>> 42
+>>> 33
+>>> 33
+>>> 66 
+>>> 66
 ]]]
 
-==Bexp new setVariableAndDefineBlock3}== will print 42, 33, 33, 66 and 66.
+==Bexp new setVariableAndDefineBlock3== will print 42, 33, 33, 66 and 66.
 Here the two blocks ==[ t := 33. t traceCr ]== and ==[ t := 66. t traceCr ]== access the same variable ==t== and can modify it. During the first execution of the method ==executeBlock:== its current value ==42== is printed, then the value is changed and printed. A similar situation occurs with the second call. This example shows that blocks share the location where variables are stored and also that a block does not copy the value of a captured variable. It just refers to the location of the variables and several blocks can refer to the same location.
 
+
+!!!Experiment 4: Variable lookup is done at execution time.
+
+The following example shows that the value of the variable is looked up at runtime and not copied during the block creation. First add the instance variable ==block== to the class ==Bexp==.
+
+[[[
+Object subclass: #Bexp
+	instanceVariableNames: 'block'
+	classVariableNames: ''
+	package: 'BlockExperiment'
+]]]
+
+Here the initial value of the variable ==t== is 42. The block is created and stored into the instance variable ==block==but the value to ==t== is changed to 69 before the block is evaluated. And this is the last value (69) that is effectively printed because it is looked up at execution-time. Executing ==Bexp new setVariableAndDefineBlock4== prints 69.
+
+
+
+[[[
+Bexp >> setVariableAndDefineBlock4
+	| t |
+	t := 42.
+	block := [ t traceCr: t ].
+	t := 69.
+	self executeBlock: block
+
+Bexp new setVariableAndDefineBlock4 
+>>> 69
+]]]
+
+!!!Experiment 5: For method arguments
+We can expect that method arguments are bound in the context of the defining method.
+Let's illustrate this point now. Define the following methods.
+
+[[[
+Bexp >> testArg
+	self testArg: 'foo'.
+
+Bexp >> testArg: arg
+	block := [arg traceCr].
+	self executeBlockAndIgnoreArgument: 'zork'.
+
+Bexp >> executeBlockAndIgnoreArgument: arg
+	block value
+]]]
+
+Now executing ==Bexp new testArg: 'foo'== prints =='foo'== even if in the method ==executeBlockAndIgnoreArgument:== the temporary ==arg== is redefined.
+In fact each method invocation has its own values for the arguments.
+
+!!! Experiment 6: self binding
+Now we may  wonder if self is also captured.
+To test we need another class. Let's simply define a new class and a couple of methods.
+Add the instance variable ==x== to the class ==Bexp== and define the ==initialize== method as follows:
+
+[[[
+Object subclass: #Bexp
+	instanceVariableNames: 'block x'
+	classVariableNames: ''
+	package: 'BlockExperiment'
+
+Bexp >> initialize
+    super initialize.
+	x := 123.
+]]]
+
+Define another class named ==Bexp2==.
+
+[[[
+Object subclass: #Bexp2
+	instanceVariableNames: 'x'
+	classVariableNames: ''
+	package: 'BlockExperiment'
+
+Bexp2 >> initialize
+	super initialize.
+	x := 69.
+
+Bexp2 >> executeBlock: aBlock
+	aBlock value
+]]]
+
+Then define the methods that will invoke  methods defined in ==Bexp2==.
+[[[
+Bexp >> executeBlock: aBlock
+	Bexp2 new executeBlock: aBlock
+
+Bexp >> executeBlock
+	self executeBlock: [self crTrace ; traceCr: x]
+]]]
+
+[[[
+Bexp new executeBlock
+>>> a Bexp123  "and not a Bexp269"
+]]]
+
+Now when we execute ==Bexp new executeBlock==, we get ==a Bexp123== printed showing that a block captures ==self== too, since an instance of ==Bexp2== executed the block but the printed object (==self==) is the original ==Bexp== instance that was accessible at the block creation time.
+
+!!!Conclusion
+
+We show that blocks capture variables that are reached from the context in which the block was defined and not where there are executed. Blocks keep references to variable locations that can be shared between multiple blocks. 
 
 
 
