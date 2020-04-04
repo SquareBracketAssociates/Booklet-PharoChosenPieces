@@ -138,7 +138,8 @@ Object subclass: #Bexp
 
 
 !!! Experiment 1: Variable lookup.
- A variable is looked up in the block definition context. We define two methods: one that defines a variable ==t== and sets it to 42 and a block ==[t traceCr]executeBlock: and one that defines a new variable with the same name and executes a block defined elsewhere.
+ A variable is looked up in the block definition context. 
+ We define two methods: one that defines a variable ==t== and sets it to 42 and a block ==[t traceCr]== and one that defines a new variable with the same name and executes a block defined elsewhere.
 
 [[[
 Bexp >> setVariableAndDefineBlock
@@ -165,7 +166,7 @@ The variable ==t== is  looked up in the context of the block creation (context c
 Let's look at it in detail. Figure *@fig:variable* shows the execution of the expression ==Bexp new setVariableAndDefineBlock==. 
 
 - During the execution of method ==setVariableAndDefineBlock==, a variable ==t== is defined and it is assigned 42. Then a block is created and this block refers to the method activation context - which holds temporary variables (Step 1). 
-- The method ==executeBlock:== defines its own local variable ==t== with the same name than the one in the block. This is not this variable, however, that is used when the block is evaluated. While executing the method ==executeBlock:== the block is evaluated (Step 2), during the execution of the expression ==t traceCr'' the non-local variable ==t== is looked up in the ''home context'' of the block i.e. the method context that ''created'' the block and not the context of the currently executed method.
+- The method ==executeBlock:== defines its own local variable ==t== with the same name than the one in the block. This is not this variable, however, that is used when the block is evaluated. While executing the method ==executeBlock:== the block is evaluated (Step 2), during the execution of the expression ==t traceCr== the non-local variable ==t== is looked up in the ''home context'' of the block i.e. the method context that ''created'' the block and not the context of the currently executed method.
 
 
 
@@ -182,6 +183,46 @@ Let's look at it in detail. Figure *@fig:variable* shows the execution of the ex
 
 
 
+@@important Non-local variables are looked up in the ''home context'' of the block (i.e., the method context that ''created'' the block) and not the context executing the block.
+
+!!! Experiment 2: Changing a variable value.
+ Let's continue our experiments. The method \ct{setVariableAndDefineBlock2} shows that a non-local variable value can be changed during the evaluation of a block. Executing \ct{Bexp new setVariableAndDefineBlock2} prints 33, since 33 is the last value of the variable \ct{t}.
+
+
+[[[
+Bexp>>setVariableAndDefineBlock2
+	| t |
+	t := 42.
+	self executeBlock: [ t := 33. t traceCr ]
+
+Bexp new setVariableAndDefineBlock2	
+	--> 33
+]]]
+
+
+!!!Experiment 3: Accessing a shared non-local variable.
+Two blocks can share a non-local variable and they can modify the value of this variable at different moments. To see this, let us define a new method \ct{setVariableAndDefineBlock3} as follows:
+
+[[[
+Bexp>>setVariableAndDefineBlock3
+	| t |
+	t := 42.
+	self executeBlock: [ t traceCr. t := 33. t traceCr ].
+	self executeBlock: [ t traceCr. t := 66. t traceCr ].
+	self executeBlock: [ t traceCr ]
+]]]
+
+[[[
+Bexp new setVariableAndDefineBlock3
+	--> 42
+	--> 33
+	--> 33
+	--> 66 
+	--> 66
+]]]
+
+==Bexp new setVariableAndDefineBlock3}== will print 42, 33, 33, 66 and 66.
+Here the two blocks ==[ t := 33. t traceCr ]== and ==[ t := 66. t traceCr ]== access the same variable ==t== and can modify it. During the first execution of the method ==executeBlock:== its current value ==42== is printed, then the value is changed and printed. A similar situation occurs with the second call. This example shows that blocks share the location where variables are stored and also that a block does not copy the value of a captured variable. It just refers to the location of the variables and several blocks can refer to the same location.
 
 
 
