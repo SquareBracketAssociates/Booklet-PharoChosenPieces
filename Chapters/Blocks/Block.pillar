@@ -547,18 +547,21 @@ start start
 start end
 ]]]
 
-What we see is that the calling method ==start== is fully executed. The method ==defineBlock== is not completely executed. Indeed, its escaping block ==[^33]== is executed two calls away in the method ==executeBlock:==. The evaluation of the block returns to the ''block home context sender== (\ie the context that invoked the method creating the block).
+What we see is that the calling method ==start== is fully executed.
+The method ==defineBlock== is not completely executed. Indeed, its escaping block ==[\^33]== is executed two calls away in the method ==executeBlock:==.
+The evaluation of the block returns to the ''block home context sender'' (i.e., the context that invoked the method creating the block).
 
 When the return statement of the block is executed in the method ==executeBlock:==, the execution discards the pending computation and returns to the ''method execution point that created the home context of the block''. The block is defined in  the method ==defineBlock==. The home context of the block is the activation context that represents the definition of the method ==defineBlock==. Therefore the return expression returns to the ==start== method execution just after the ==defineBlock== execution. This is why the pending executions of ==arg:== and ==executeBlock:== are discarded and why we see the execution of the method ==start== end.
 
 +A block with non-local return execution returns to the method execution that activated the block home context. Frames represent contexts and dashed frames represent the same block at different execution points.>file://figures/nonLocalReturn2.png|label=nonLocalReturn+
 
 
-As shown by Figure *@nonLocalReturn*, ==[^33]== will return to the sender of its home context. ==[^33]== home context is the context that represents the execution of the method ==defineBlock==, therefore it will return its result to the method ==start==.
+As shown by Figure *@nonLocalReturn*, ==[\^33]== will return to the sender of its home context. 
+==[\^33]== home context is the context that represents the execution of the method ==defineBlock==, therefore it will return its result to the method ==start==.
 
 
 - Step 1 represents the execution up to the invocation of the method ==defineBlock==. The trace =='start start'== is printed.
--  Step 3 represents the execution up to the block creation, which is done in Step 2. =='defineBlock start'== is printed. The home context  of the block is the ==defineBlock== method execution context.
+- Step 3 represents the execution up to the block creation, which is done in Step 2. =='defineBlock start'== is printed. The home context  of the block is the ==defineBlock== method execution context.
 - Step 4 represents the execution up to the invocation of the method ==executeBlock:==. =='arg start'== is printed.
 - Step 5 represents the execution up to the block evaluation.  =='executeBlock start'== is printed.
 - Step 6 represents the execution of the block up to the  condition: =='block start'== is printed.
@@ -566,14 +569,17 @@ As shown by Figure *@nonLocalReturn*, ==[^33]== will return to the sender of its
 - Step 8 represents the execution of the return statement. It returns to the sender of the block home context, \ie just after the  invocation of the method ==defineBlock== in the method ==start==. The  execution continues and =='start end'== gets printed.
 
 
-@@important Non local return ==[^ ...]== returns to the sender of the block home context, \ie to the method execution point that called the one that created the block.
+@@important Non local return ==[\^ ...]== returns to the sender of the block home context, \ie to the method execution point that called the one that created the block.
 
 @@important A return in a method returns a value to the sender of the method and stop executing the method containing the return. A non-local return does the same even if the block is executed by another method.
 
 
 !!!Accessing information
 
-To manually verify and find the home context of a block we can do the following: Add the expression ==thisContext home inspect== in the block of the  method ==defineBlock==. We can also add the expression ==thisContext closure home inspect== which accesses the closure via the current execution context and gets its home context. Note that in both cases, even if the block is executed during the execution of the method ==executeBlock:==, the home context of the block is the method ==defineBlock==.
+To manually verify and find the home context of a block we can do the following: 
+Add the expression ==thisContext home inspect== in the block of the  method ==defineBlock==. 
+We can also add the expression ==thisContext closure home inspect== which accesses the closure via the current execution context and gets its home context. 
+Note that in both cases, even if the block is executed during the execution of the method ==executeBlock:==, the home context of the block is the method ==defineBlock==.
 
 Note that such expressions will be executed during the block evaluation.
 
@@ -698,7 +704,7 @@ If the block is not nested then the outer context is also  the block home contex
 
 If the block is nested inside another block execution, then the outer context refers to that block execution context, and the block execution's outerContext is the home context.  There are as many outer context steps as there are nesting levels.
 
-Let's look at the following example. When you execute, just press "ok" to the dialogs popping up.
+Let's look at the following example. When you execute, just press Ok to the dialogs popping up.
 
 [[[
 | homeContext b1 |
@@ -716,8 +722,8 @@ b1 value
 
 
 - First we set in ==homeContext==, the context before the block creation. ==homeContext== is the home context of the blocks ==b1== and ==b2== because they are defined during this execution.
--  ==thisContext closure == b1== shows that the context inside the execution of the block ==b1== has a pointer to ==b1==. The outer context of b1 is ==homeContext==. Nothing new because ==b1== is defined during the execution starting after the assignment. The home context of ==b1== is the same as its outer context.
-- Inside ==b2== execution, the current context points to ==b2== itself since it is a closure. The outer context of the closure in which b2 is defined \ie b1 points to ==homeContext==. Finally the home context of ==b2== is ==homeContext==. This last point shows that all the nested blocks have a separate outer context, but they share the same home context.
+- ==thisContext closure b1== shows that the context inside the execution of the block ==b1== has a pointer to ==b1==. The outer context of ==b1== is ==homeContext==. Nothing new because ==b1== is defined during the execution starting after the assignment. The home context of ==b1== is the same as its outer context.
+- Inside ==b2== execution, the current context points to ==b2== itself since it is a closure. The outer context of the closure in which ==b2== is defined i.e., ==b1== points to ==homeContext==. Finally the home context of ==b2== is ==homeContext==. This last point shows that all the nested blocks have a separate outer context, but they share the same home context.
 
 
 % ============================================================================
@@ -811,7 +817,7 @@ remote array which is heap allocated.
 
 +How the VM stores remote variables so that they continue to leave when a method returns.>file://figures/BlockWithMethodContext.png|label=fig:BlockWithMethodContext+
 
-==========================================================================================================
+%%==========================================================================================================
 %Rest was commented
 % \subsection{Reading Remote Variables in a TemporaryVector}
 % The following example defines a block that read a temporary variable from its enclosing block.
