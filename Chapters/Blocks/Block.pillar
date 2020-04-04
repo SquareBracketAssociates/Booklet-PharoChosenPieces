@@ -89,7 +89,7 @@ Some messages are useful to profile execution:
 
 
 
-Some messages are related to error handling (as explained in the Chapter @cha:exception@.
+Some messages are related to error handling (as explained in the Chapter *@cha:exception*.
 
 
 - ==ensure: terminationBlock==. Evaluate the termination block after evaluating the receiver, regardless of whether the receiver's evaluation completes.
@@ -168,7 +168,7 @@ Let's look at it in detail. Figure *@fig:variable* shows the execution of the ex
 - During the execution of method ==setVariableAndDefineBlock==, a variable ==t== is defined and it is assigned 42. Then a block is created and this block refers to the method activation context - which holds temporary variables (Step 1). 
 - The method ==executeBlock:== defines its own local variable ==t== with the same name than the one in the block. This is not this variable, however, that is used when the block is evaluated. While executing the method ==executeBlock:== the block is evaluated (Step 2), during the execution of the expression ==t traceCr== the non-local variable ==t== is looked up in the ''home context'' of the block i.e. the method context that ''created'' the block and not the context of the currently executed method.
 
-
++Non-local variables are looked up the method activation context where the block was ''created'' and not where it is ''evaluated''.>file://figures/variable.pdf|label=fig:variable+
 
 @@important Non-local variables are looked up in the ''home context'' of the block (i.e., the method context that ''created'' the block) and not the context executing the block.
 
