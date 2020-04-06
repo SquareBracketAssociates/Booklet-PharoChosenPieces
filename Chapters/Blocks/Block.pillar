@@ -342,7 +342,7 @@ This result shows that each block in the collection refers to a different ==temp
 This is due to the fact that an execution context is created for each block creation (at each loop step) and that the block ==[ temp ]== is stored in this context (see Figure *@blockClosureLocalTemp*).
 
 
-+==blockLocalTemp== execution.>file://figures/blockClosureLocalTemp.png|label=blockClosureLocalTemp+
++==blockLocalTemp== execution.>file://figures/blockClosureLocalTemp.pdf|label=blockClosureLocalTemp+
 
 
 !!!Method allocation
@@ -361,7 +361,7 @@ Bexp >> blockOutsideTemp
 
 When we execute the method ==blockOutsideTemp==, we now get a collection with 3, 3 and 3. This result shows that each block in the collection now refers to a single variable ==temp== allocated in the ==blockOutsideTemp== context leading to the fact that ==temp== is shared by the blocks (see Figure *@blockClosureOutsideTemp*).
 
-+==blockOutsideTemp== execution.>file://figures/blockClosureOutsideTemp.png|label=blockClosureOutsideTemp+
++==blockOutsideTemp== execution.>file://figures/blockClosureOutsideTemp.pdf|label=blockClosureOutsideTemp+
 
 
 % ============================================================================
@@ -553,7 +553,7 @@ The evaluation of the block returns to the ''block home context sender'' (i.e., 
 
 When the return statement of the block is executed in the method ==executeBlock:==, the execution discards the pending computation and returns to the ''method execution point that created the home context of the block''. The block is defined in  the method ==defineBlock==. The home context of the block is the activation context that represents the definition of the method ==defineBlock==. Therefore the return expression returns to the ==start== method execution just after the ==defineBlock== execution. This is why the pending executions of ==arg:== and ==executeBlock:== are discarded and why we see the execution of the method ==start== end.
 
-+A block with non-local return execution returns to the method execution that activated the block home context. Frames represent contexts and dashed frames represent the same block at different execution points.>file://figures/nonLocalReturn2.png|label=nonLocalReturn+
++A block with non-local return execution returns to the method execution that activated the block home context. Frames represent contexts and dashed frames represent the same block at different execution points.>file://figures/nonLocalReturn2.pdf|label=nonLocalReturn+
 
 
 As shown by Figure *@nonLocalReturn*, ==[\^33]== will return to the sender of its home context. 
@@ -767,7 +767,7 @@ The program counter points to the last instruction of the compiled method. Sende
 %this is appropriate, \etc. A ==MethodContext} represents an executing
 %method and has a pointer back to the context from which it was activated.
 
-+Relations between contexts and compiled methods.>file://figures/MethodAndMethodContext.png|label=fig:MethodAndMethodContext+
++Relations between contexts and compiled methods.>file://figures/MethodAndMethodContext.pdf|label=fig:MethodAndMethodContext+
 
 
 !!!Sketch of implementation
@@ -791,7 +791,7 @@ This approach works well if all objects are first-class objects, including the m
 Blocks can be executed outside their home context and still refer to remote variables.
 Hence all home contexts might outlive the method activation.
 
-+A first understanding of closures.>file://figures/BlockWithFullClosures.png|label=fig:BlockWithFullClosures+
++A first understanding of closures.>file://figures/BlockWithFullClosures.pdf|label=fig:BlockWithFullClosures+
 
 
 !!!Implementation
@@ -815,7 +815,7 @@ The Figure *@fig:BlockWithMethodContext* shows how non-local variables are no lo
 remote array which is heap allocated.
 
 
-+How the VM stores remote variables so that they continue to leave when a method returns.>file://figures/BlockWithMethodContext.png|label=fig:BlockWithMethodContext+
++How the VM stores remote variables so that they continue to leave when a method returns.>file://figures/BlockWithMethodContext.pdf|label=fig:BlockWithMethodContext+
 
 %%==========================================================================================================
 %Rest was commented
