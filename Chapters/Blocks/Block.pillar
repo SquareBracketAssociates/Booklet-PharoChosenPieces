@@ -175,25 +175,20 @@ Let's look at it in detail. Figure *@fig:variable* shows the execution of the ex
 @@important Non-local variables are looked up in the ''home context'' of the block (i.e., the method context that ''created'' the block) and not the context executing the block.
 
 !!! Experiment 2: Changing a variable value
- Let's continue our experiments. The method ==setVariableAndDefineBlock2== shows that a non-local variable value can be changed during the evaluation of a block. 
- Executing ==BExp new setVariableAndDefineBlock2== returns 2008, since 2008 is the last value of the variable ==t==.
+ Let's continue our experiments. The method ==setVariableAndChangingVariableBlock== shows that a non-local variable value can be changed during the evaluation of a block. 
+ Executing ==BExp new setVariableAndChangingVariableBlock== returns 2008, since 2008 is the last value of the variable ==t==.
  
 [[[
-BExp >> setVariableAndDefineBlock2
+BExp >> setVariableAndChangingVariableBlock
 	| t |
 	t := 42.
 	^ self executeBlock: [ t := 2008. t ]
 ]]]
 
-[[[
-BExp new setVariableAndDefineBlock2	
->>> 2008
-]]]
-
 The test verifies this behavior.
 [[[
-BExp >> testSetVariableAndDefineBlock2
-	self assert: self setVariableAndDefineBlock2 equals: 2008
+BExp >> testSetVariableAndChangingVariableBlock
+	self assert: self setVariableAndChangingVariableBlock equals: 2008
 ]]]
 
 !!!Experiment 3: Accessing a shared non-local variable.
@@ -239,49 +234,53 @@ Object subclass: #BExp
 	package: 'BlockExperiment'
 ]]]
 
-Here the initial value of the variable ==t== is 42. The block is created and stored into the instance variable ==block==but the value to ==t== is changed to 69 before the block is executed. And this is the last value (69) that is effectively printed because it is looked up at execution-time. Executing ==BExp new setVariableAndDefineBlock4== prints 69.
-
-
+Here the initial value of the variable ==t== is 42. The block is created and stored into the instance variable ==block==but the value to ==t== is changed to 69 before the block is executed. And this is the last value (69) that is effectively printed because it is looked up at execution-time in the home context of the block. Executing ==BExp new variableLookupIsDoneAtExecution== return =='69'== as confirmed by the tests.
 
 [[[
-BExp >> setVariableAndDefineBlock4
-	| t |
-	t := 42.
-	block := [ t traceCr: t ].
-	t := 69.
-	self executeBlock: block
+BExp >> variableLookupIsDoneAtExecution
+	
+	^ String streamContents: [ :st |  
+		| t |
+		t := 42.
+		block := [ st print: t ].
+		t := 69.
+		self executeBlock: block ]
 ]]]
 
 [[[
-BExp new setVariableAndDefineBlock4 
->>> 69
+BExp >> testVariableLookupIsDoneAtExecution
+	self assert: self variableLookupIsDoneAtExecution equals: '69'
 ]]]
 
 !!!Experiment 5: For method arguments
-We can naturally expect that method arguments are bound in the context of the defining method.
+We can naturally expect that method arguments referred by a block are bound in the context of the defining method.
 Let's illustrate this point. Define the following methods.
 
-%[[[
-%BExp >> testArg
-%	self testArg: 'foo'.
-%]]]
-
 [[[
-BExp >> testArg: arg
-	block := [ arg traceCr ].
-	self executeBlockAndIgnoreArgument: 'zork'.
+BExp >> testArg5: arg
+	^ String streamContents: [ :st |  
+		block := [ st << arg ].
+		self executeBlockAndIgnoreArgument: 'zork']
 ]]]
+
 [[[
 BExp >> executeBlockAndIgnoreArgument: arg
-	block value
+	^ block value
 ]]]
 
-Now executing ==BExp new testArg: 'foo'== prints =='foo'== even if in the method ==executeBlockAndIgnoreArgument:== the temporary ==arg== is redefined.
-In fact each method invocation has its own values for the arguments.
+[[[
+BExp >> testArg5
+	self assert: (self testArg5: 'foo') equals: 'foo'
+]]]
+
+Executing ==BExp new testArg: 'foo'== returns =='foo'== even if in the method ==executeBlockAndIgnoreArgument:== the temporary ==arg== is redefined.
+The block execution looks for the value of ==arg== is its definition context which is the one where ==testArg5:== ' ==arg== is bound to 'foo' due to the execution of method ==testArg5==.
+
 
 !!! Experiment 6: self binding
-Now we may wonder if self is also captured. Obviously it should be but let us test it. 
-To test we need another class. Let's simply define a new class and a couple of methods.
+Now we may wonder if ==self== is also captured in a block. It should be but let us test it. 
+To test we need another class. 
+Let's simply define a new class and a couple of methods.
 Add the instance variable ==x== to the class ==BExp== and define the ==initialize== method as follows:
 
 [[[
@@ -303,33 +302,42 @@ Object subclass: #BExp2
 	instanceVariableNames: 'x'
 	classVariableNames: ''
 	package: 'BlockExperiment'
+]]]
 
+[[[
 BExp2 >> initialize
 	x := 69.
-
-BExp2 >> executeBlock: aBlock
-	aBlock value
-]]]
-
-Then define the methods that will invoke  methods defined in ==BExp2==.
-[[[
-BExp >> executeBlock: aBlock
-	BExp2 new executeBlock: aBlock
-
-BExp >> executeBlock
-	self executeBlock: [ self crTrace ; traceCr: x ]
 ]]]
 
 [[[
-BExp new executeBlock
->>> a BExp123  "and not a BExp269"
+BExp2 >> executeBlockInAnotherInstance6: aBlock
+	^ aBlock value
 ]]]
 
-Now when we execute ==BExp new executeBlock==, we get ==a BExp123== printed showing that a block captures ==self== too, since an instance of ==BExp2== executed the block but the printed object (==self==) is the original ==BExp== instance that was accessible at the block creation time.
+Then define the methods that will invoke methods defined in ==BExp2==.
 
+[[[
+BExp >> selfIsCapturedToo
+	^ String streamContents: [ :st | 
+			self executeBlockInAnotherInstance6: [ st print: self ; print: x ] ]
+]]]
+
+[[[ 
+BExp >> executeBlockInAnotherInstance6: aBlock
+	^ NBexp2 new executeBlockInAnotherInstance6: aBlock
+]]]
+
+Finally we write a test showing that this is indeed the instance of ==BExp== that is bound to ==self== even if it is executed in ==BExp2==.
+
+[[[
+BExp >> testSelfIsCapturedToo
+	self assert: self selfIsCapturedToo equals: 'NBexp>>#testSelfIsCapturedToo123'
+]]]
+
+Now when we execute ==BExp new selfIsCapturedToo==, we get ==NBexp>>#testSelfIsCapturedToo== printed showing that a block captures ==self== too, since an instance of ==BExp2== executed the block but the printed object (==self==) is the original ==BExp== instance that was accessible at the block creation time. The printing is ==NBexp>>#testSelfIsCapturedToo== because ==BExp== is  subclass of ==TestCase==.
 
 !!!!!Conclusion. 
-We show that blocks capture variables that are reached from the context in which the block was defined and not where there are executed. Blocks keep references to variable locations that can be shared between multiple blocks. 
+We show that blocks capture variables that are reached from the ''context in which the block was defined'' and not where there are executed. Blocks keep references to variable locations that can be shared between multiple blocks. 
 
 
 %stef up to here!
