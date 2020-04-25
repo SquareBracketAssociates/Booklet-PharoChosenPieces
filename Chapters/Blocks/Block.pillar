@@ -97,7 +97,7 @@ Some messages are related to error handling (as explained in the Chapter *@cha:e
 
 - ==on: exception do: catchBlock==. Execute the receiver. If an exception ==exception== is raised, execute the catch block.
 
-- ==on: exception fork: catchBlock==. Execute the receiver. If an exception ==exception== is raised, fork a new process, which will handle the error. The original process will continue running as if the receiver evaluation finished and answered nil,\ie  an expression like: ==[ self error: 'some error'] on: Error fork: [:ex |  123 ]== will always answer nil to the original process. The context stack, starting from the context which sent this message to the receiver and up to the top of the stack will be transferred to the forked process, with the catch block on top. Eventually, the catch block will be executed in the forked process.
+- ==on: exception fork: catchBlock==. Execute the receiver. If an exception ==exception== is raised, fork a new process, which will handle the error. The original process will continue running as if the receiver evaluation finished and answered nil, i.e.,  an expression like: ==[ self error: 'some error'] on: Error fork: [:ex |  123 ]== will always answer nil to the original process. The context stack, starting from the context which sent this message to the receiver and up to the top of the stack will be transferred to the forked process, with the catch block on top. Eventually, the catch block will be executed in the forked process.
 
 Some messages are related to process scheduling. We list the most important ones. Since this Chapter is not about concurrent programming in Pharo, we will not go deep into them.
 
@@ -106,31 +106,25 @@ Some messages are related to process scheduling. We list the most important ones
 - ==newProcess==. Answer a Process evaluating the receiver. The process is not scheduled.
 
 
-
-
-
-
 !!! Variables and blocks
-
 
 A block can have its own temporary variables. Such variables are initialized during each block execution and are local to the block. We will see later how such variables are kept. Now the question we want to make clear is what is happening when a block refers to other (non-local) variables. A block will close over the external variables it uses. It means that even if the block is executed later in an environment that does not lexically contain the variables used by a block, the block will still have access to the variables during its execution. Later, we will present how local variables are implemented and stored using contexts.
 
-In Pharo, private variables (such as self, instance variables, method temporaries and arguments) are lexically scoped: an expression in a method can access to the variables visible from that method, but the same expression put in another method or class cannot access the same variables because they are not in the scope of the expression (\ie visible from the expression). 
+In Pharo, private variables (such as self, instance variables, method temporaries and arguments) are lexically scoped: an expression in a method can access to the variables visible from that method, but the same expression put in another method or class cannot access the same variables because they are not in the scope of the expression (i.e., visible from the expression). 
 
 At runtime, the variables that a block can access, are bound (get a value associated to them) in ''the context'' in which the block that contains them is ''defined'', rather than the context in which the block is executed. It means that a block, when executed somewhere else can access variables that were in its scope (visible to the block) when the block was ''created''. Traditionally, the context in which a block is defined is named the ''block home context''.
 
-The block home context represents a particular point of execution (since this is a program execution that created the block in the first place), therefore this notion of block home context is represented by an object that represents program execution: a context object in Pharo. In essence, a context (called stack frame or activation record in other languages) represents information about the current execution step such as the context from which the current one is executed, the next byte code to be executed, and temporary variable values. A context is a Pharo execution stack element. This is important and we will come back later to this concept.
+The block home context represents a particular point of execution (since this is a program execution that created the block in the first place), therefore this notion of block home context is represented by an object that represents program execution: a ''context'' object in Pharo. In essence, a context (called stack frame or activation record in other languages) represents information about the current execution step such as the context from which the current one is executed, the next instruction (byte code) to be executed, and temporary variable values. A context is a Pharo execution stack element. This is important and we will come back later to this concept. 
 
-@@important A block is created inside a context (an object that represents a point in the execution).
-
-
-
+@@important A block is created inside a context (an object that represents a point in the execution) and it can access variables that were accessible at creation time.
 
 !!!Some little experiments
-Let's experiment a bit to understand how variables are bound in a block. Define a class named ==Bexp== (for BlockExperiment):
+Let's experiment a bit to understand how variables are bound in a block. 
+Define a class named ==BExp== (for BlockExperiment) as a subclass of ==TestCase== so that we can define quickly some tests to make sure that our results 
+are always correct. 
 
 [[[
-Object subclass: #Bexp
+TestCase subclass: #BExp
 	instanceVariableNames: ''
 	classVariableNames: ''
 	package: 'BlockExperiment'
@@ -138,179 +132,207 @@ Object subclass: #Bexp
 
 
 !!! Experiment 1: Variable lookup.
- A variable is looked up in the block definition context. 
- We define two methods: one that defines a variable ==t== and sets it to 42 and a block ==[t traceCr]== and one that defines a new variable with the same name and executes a block defined elsewhere.
+ A variable is looked up in the block ''definition'' context. 
+ We define two methods: one that defines a variable ==t== and sets it to 42 and a block ==[ t ]== and one that defines a new variable with the same name and executes a block defined elsewhere.
 
 [[[
-Bexp >> setVariableAndDefineBlock
+BExp >> setVariableAndDefineBlock
 	| t |
 	t := 42.
-	self executeBlock: [ t traceCr ]
-	
-Bexp >> executeBlock: aBlock
-	| t |
-	t := nil.
-	aBlock value	
+	^ self executeBlock: [ t ]
 ]]]
 
 [[[
-Bexp new setVariableAndDefineBlock 
+BExp >> executeBlock: aBlock
+	| t |
+	t := 33.
+	^ aBlock value	
+]]]
+
+[[[
+BExp new setVariableAndDefineBlock 
 >>> 42
 ]]]
 
-Executing the ==Bexp new setVariableAndDefineBlock== expression prints 42 (message ==traceCr==). 
+The following test passes. Executing the ==BExp new setVariableAndDefineBlock== expression returns 42 . 
+
+[[[
+BExp >> testSetVariableAndDefineBlock
+	self assert: self setVariableAndDefineBlock equals: 42
+]]]
+
 The value of the temporary variable ==t== defined in the ==setVariableAndDefineBlock== method is the one used rather than the one defined inside the method ==executeBlock:== even if the block is executed during the execution of this method. 
 The variable ==t== is  looked up in the context of the block creation (context created during the execution of the method ==setVariableAndDefineBlock== and not in the context of the block evaluation 
 (method ==executeBlock:==).
 
-Let's look at it in detail. Figure *@fig:variable* shows the execution of the expression ==Bexp new setVariableAndDefineBlock==. 
+Let's look at it in detail. Figure *@fig:variable* shows the execution of the expression ==BExp new setVariableAndDefineBlock==. 
 
-- During the execution of method ==setVariableAndDefineBlock==, a variable ==t== is defined and it is assigned 42. Then a block is created and this block refers to the method activation context - which holds temporary variables (Step 1). 
-- The method ==executeBlock:== defines its own local variable ==t== with the same name than the one in the block. This is not this variable, however, that is used when the block is executed. While executing the method ==executeBlock:== the block is executed (Step 2), during the execution of the expression ==t traceCr== the non-local variable ==t== is looked up in the ''home context'' of the block i.e. the method context that ''created'' the block and not the context of the currently executed method.
+- During the execution of method ==setVariableAndDefineBlock==, a variable ==t== is defined and it is assigned 42. Then a block is created and this block refers to the method activation context - which holds temporary variables. 
+- The method ==executeBlock:== defines its own local variable ==t== with the same name than the one in the block. This is not this variable, however, that is used when the block is executed. While executing the method ==executeBlock:== the block is executed, during the execution of the expression ==t== the non-local variable ==t== is looked up in the ''home context'' of the block i.e., the method context that ''created'' the block and not the context of the currently executed method.
 
-+Non-local variables are looked up the method activation context where the block was ''created'' and not where it is ''executed''.>file://figures/variable.pdf|label=fig:variable+
++Non-local variables are looked up in the method activation context where the block was ''created'' and not where it is ''executed''.>file://figures/variable.pdf|label=fig:variable+
 
 @@important Non-local variables are looked up in the ''home context'' of the block (i.e., the method context that ''created'' the block) and not the context executing the block.
 
 !!! Experiment 2: Changing a variable value
- Let's continue our experiments. The method ==setVariableAndDefineBlock2== shows that a non-local variable value can be changed during the evaluation of a block. Executing ==Bexp new setVariableAndDefineBlock2== prints 33, since 33 is the last value of the variable ==t==.
-
-
+ Let's continue our experiments. The method ==setVariableAndDefineBlock2== shows that a non-local variable value can be changed during the evaluation of a block. 
+ Executing ==BExp new setVariableAndDefineBlock2== returns 2008, since 2008 is the last value of the variable ==t==.
+ 
 [[[
-Bexp >> setVariableAndDefineBlock2
+BExp >> setVariableAndDefineBlock2
 	| t |
 	t := 42.
-	self executeBlock: [ t := 33. t traceCr ]
-
-Bexp new setVariableAndDefineBlock2	
->>> 33
+	^ self executeBlock: [ t := 2008. t ]
 ]]]
 
+[[[
+BExp new setVariableAndDefineBlock2	
+>>> 2008
+]]]
+
+The test verifies this behavior.
+[[[
+BExp >> testSetVariableAndDefineBlock2
+	self assert: self setVariableAndDefineBlock2 equals: 2008
+]]]
 
 !!!Experiment 3: Accessing a shared non-local variable.
-Two blocks can share a non-local variable and they can modify the value of this variable at different moments. To see this, let us define a new method ==setVariableAndDefineBlock3== as follows:
+Different blocks can share a non-local variable and they can modify the value of this variable at different moments. 
+To see this, let us define a new method ==accessingSharedVariables== as follows:
 
 [[[
-Bexp >> setVariableAndDefineBlock3
+BExp >> accessingSharedVariables
 	| t |
-	t := 42.
-	self executeBlock: [ t traceCr. t := 33. t traceCr ].
-	self executeBlock: [ t traceCr. t := 66. t traceCr ].
-	self executeBlock: [ t traceCr ]
+	^ String streamContents: [ :st |  
+		t := 42.
+		self executeBlock: [ st print: t. st cr. t := 99. st print: t. st cr ].
+		self executeBlock: [ st print: t. st cr. t := 66. st print: t. st cr ].
+		self executeBlock: [ st print: t. st cr. ]
+	]
 ]]]
+
+The following test shows the results:
 
 [[[
-Bexp new setVariableAndDefineBlock3
->>> 42
->>> 33
->>> 33
->>> 66 
->>> 66
+BExp >> testAccessingSharedVariables
+	self assert: self accessingSharedVariables equals: '42
+	99
+	99
+	66
+	66
+	'
 ]]]
 
-==Bexp new setVariableAndDefineBlock3== will print 42, 33, 33, 66 and 66.
-Here the two blocks ==[ t := 33. t traceCr ]== and ==[ t := 66. t traceCr ]== access the same variable ==t== and can modify it. During the first execution of the method ==executeBlock:== its current value ==42== is printed, then the value is changed and printed. A similar situation occurs with the second call. This example shows that blocks share the location where variables are stored and also that a block does not copy the value of a captured variable. It just refers to the location of the variables and several blocks can refer to the same location.
+==BExp new accessingSharedVariables== will print 42, 99, 99, 66 and 66.
+Here the two blocks ==[ st print: t. st cr. t := 99. st print: t. st cr  ]== and ==[ st print: t. st cr. t := 66. st print: t. st cr ]== access the same variable ==t== and can modify it. During the first execution of the method ==executeBlock:== its current value ==42== is printed, then the value is changed and printed. A similar situation occurs with the second call. This example shows that blocks share the location where variables are stored and also that a block does not copy the value of a captured variable. It just refers to the location of the variables and several blocks can refer to the same location.
 
+%stef here
 
 !!!Experiment 4: Variable lookup is done at execution time.
 
-The following example shows that the value of the variable is looked up at runtime and not copied during the block creation. First add the instance variable ==block== to the class ==Bexp==.
+The following example shows that the value of the variable is looked up at runtime and not copied during the block creation. First add the instance variable ==block== to the class ==BExp==.
 
 [[[
-Object subclass: #Bexp
+Object subclass: #BExp
 	instanceVariableNames: 'block'
 	classVariableNames: ''
 	package: 'BlockExperiment'
 ]]]
 
-Here the initial value of the variable ==t== is 42. The block is created and stored into the instance variable ==block==but the value to ==t== is changed to 69 before the block is executed. And this is the last value (69) that is effectively printed because it is looked up at execution-time. Executing ==Bexp new setVariableAndDefineBlock4== prints 69.
+Here the initial value of the variable ==t== is 42. The block is created and stored into the instance variable ==block==but the value to ==t== is changed to 69 before the block is executed. And this is the last value (69) that is effectively printed because it is looked up at execution-time. Executing ==BExp new setVariableAndDefineBlock4== prints 69.
 
 
 
 [[[
-Bexp >> setVariableAndDefineBlock4
+BExp >> setVariableAndDefineBlock4
 	| t |
 	t := 42.
 	block := [ t traceCr: t ].
 	t := 69.
 	self executeBlock: block
+]]]
 
-Bexp new setVariableAndDefineBlock4 
+[[[
+BExp new setVariableAndDefineBlock4 
 >>> 69
 ]]]
 
 !!!Experiment 5: For method arguments
-We can expect that method arguments are bound in the context of the defining method.
-Let's illustrate this point now. Define the following methods.
+We can naturally expect that method arguments are bound in the context of the defining method.
+Let's illustrate this point. Define the following methods.
+
+%[[[
+%BExp >> testArg
+%	self testArg: 'foo'.
+%]]]
 
 [[[
-Bexp >> testArg
-	self testArg: 'foo'.
-
-Bexp >> testArg: arg
-	block := [arg traceCr].
+BExp >> testArg: arg
+	block := [ arg traceCr ].
 	self executeBlockAndIgnoreArgument: 'zork'.
-
-Bexp >> executeBlockAndIgnoreArgument: arg
+]]]
+[[[
+BExp >> executeBlockAndIgnoreArgument: arg
 	block value
 ]]]
 
-Now executing ==Bexp new testArg: 'foo'== prints =='foo'== even if in the method ==executeBlockAndIgnoreArgument:== the temporary ==arg== is redefined.
+Now executing ==BExp new testArg: 'foo'== prints =='foo'== even if in the method ==executeBlockAndIgnoreArgument:== the temporary ==arg== is redefined.
 In fact each method invocation has its own values for the arguments.
 
 !!! Experiment 6: self binding
-Now we may  wonder if self is also captured.
+Now we may wonder if self is also captured. Obviously it should be but let us test it. 
 To test we need another class. Let's simply define a new class and a couple of methods.
-Add the instance variable ==x== to the class ==Bexp== and define the ==initialize== method as follows:
+Add the instance variable ==x== to the class ==BExp== and define the ==initialize== method as follows:
 
 [[[
-Object subclass: #Bexp
+Object subclass: #BExp
 	instanceVariableNames: 'block x'
 	classVariableNames: ''
 	package: 'BlockExperiment'
+]]]
 
-Bexp >> initialize
-    super initialize.
+[[[
+BExp >> initialize
 	x := 123.
 ]]]
 
-Define another class named ==Bexp2==.
+Define another class named ==BExp2==.
 
 [[[
-Object subclass: #Bexp2
+Object subclass: #BExp2
 	instanceVariableNames: 'x'
 	classVariableNames: ''
 	package: 'BlockExperiment'
 
-Bexp2 >> initialize
-	super initialize.
+BExp2 >> initialize
 	x := 69.
 
-Bexp2 >> executeBlock: aBlock
+BExp2 >> executeBlock: aBlock
 	aBlock value
 ]]]
 
-Then define the methods that will invoke  methods defined in ==Bexp2==.
+Then define the methods that will invoke  methods defined in ==BExp2==.
 [[[
-Bexp >> executeBlock: aBlock
-	Bexp2 new executeBlock: aBlock
+BExp >> executeBlock: aBlock
+	BExp2 new executeBlock: aBlock
 
-Bexp >> executeBlock
-	self executeBlock: [self crTrace ; traceCr: x]
+BExp >> executeBlock
+	self executeBlock: [ self crTrace ; traceCr: x ]
 ]]]
 
 [[[
-Bexp new executeBlock
->>> a Bexp123  "and not a Bexp269"
+BExp new executeBlock
+>>> a BExp123  "and not a BExp269"
 ]]]
 
-Now when we execute ==Bexp new executeBlock==, we get ==a Bexp123== printed showing that a block captures ==self== too, since an instance of ==Bexp2== executed the block but the printed object (==self==) is the original ==Bexp== instance that was accessible at the block creation time.
+Now when we execute ==BExp new executeBlock==, we get ==a BExp123== printed showing that a block captures ==self== too, since an instance of ==BExp2== executed the block but the printed object (==self==) is the original ==BExp== instance that was accessible at the block creation time.
 
 
 !!!!!Conclusion. 
 We show that blocks capture variables that are reached from the context in which the block was defined and not where there are executed. Blocks keep references to variable locations that can be shared between multiple blocks. 
 
 
+%stef up to here!
 
 
 
@@ -324,7 +346,7 @@ We will show the difference when a variable is local to a block or to a method (
 Implement the following method ==blockLocalTemp==.
 
 [[[
-Bexp >> blockLocalTemp
+BExp >> blockLocalTemp
 	| collection |
 	collection := OrderedCollection new.
 	#(1 2 3) do: [ :index |
@@ -350,7 +372,7 @@ This is due to the fact that an execution context is created for each block crea
 Now let us create a new method that is the same as ==blockLocalTemp== except that the variable ==temp== is a method variable instead of a block variable.
 
 [[[
-Bexp >> blockOutsideTemp
+BExp >> blockOutsideTemp
 	| collection temp |
 	collection := OrderedCollection new.
 	#(1 2 3) do: [ :index | 
@@ -376,25 +398,25 @@ Let's look at some examples.
  We start with a simple example showing that a variable is shared between a method and a block (as in the previous experiments in fact). Define the following method ==foo== which defines a temporary variable ==a==.
 
 [[[
-Bexp>>foo
+BExp>>foo
 	| a |
 	[ a := 0 ] value.
 	^ a
 ]]]
 
 [[[
-Bexp new foo
+BExp new foo
 >>> 0	
 ]]]
 
-When we execute ==Bexp new foo==, we get 0 and not nil.
+When we execute ==BExp new foo==, we get 0 and not nil.
 What you see here  is that the value is shared between the method body and the block. Inside the method body we can access the variable whose value was set by the block evaluation.
 Both the method  and block bodies access the same temporary variable ==a==.
 
 Let's make it slightly more complicated. Define the method ==twoBlockArray== as follows:
 
 [[[
-Bexp >> twoBlockArray
+BExp >> twoBlockArray
 	| a |
 	a := 0.
 	^ {[ a := 2] . [a]}
@@ -408,7 +430,7 @@ This is what the following code snippet is doing.
 
 [[[
 | res |
-res := Bexp new twoBlockArray.
+res := BExp new twoBlockArray.
 res second value. 
 >>> 0
 res first value.
@@ -420,7 +442,7 @@ You can also define the code as follows and open a transcript to see the results
 
 [[[
 | res |
-res := Bexp new twoBlockArray.
+res := BExp new twoBlockArray.
 res second value traceCr.
 res first value.
 res second value traceCr.
@@ -453,10 +475,10 @@ This ignores the expressions following the return statement.
 
 !!!Experiment 7: Return's Exiting Behavior
 
-Define the following method. Executing ==Bexp new testExplicitReturn==  prints 'one' and 'two' but it will not print ==not printed==, since the method ==testExplicitReturn== will have returned before.
+Define the following method. Executing ==BExp new testExplicitReturn==  prints 'one' and 'two' but it will not print ==not printed==, since the method ==testExplicitReturn== will have returned before.
 
 [[[
-Bexp >> testExplicitReturn
+BExp >> testExplicitReturn
 	self traceCr: 'one'.
 	0 isZero ifTrue: [ self traceCr: 'two'. ^ self].
 	self traceCr: 'not printed'
@@ -481,7 +503,7 @@ A return expression behaves also like an escaping mechanism since the execution 
 Let us define a new method ==jumpingOut== as follows to illustrate this behavior.
 
 [[[
-Bexp >> jumpingOut
+BExp >> jumpingOut
 	#(1 2 3 4) do: [:each |
 					self traceCr: each printString.
 					each = 3
@@ -489,12 +511,12 @@ Bexp >> jumpingOut
 	^ 42
 ]]]
 [[[	
-Bexp new jumpingOut
+BExp new jumpingOut
 >>> 3
 ]]]
 
 
-For example, the following expression ==Bexp new jumpingOut== will return 3 and not 42. ==\^ 42== will never be reached. The expression ==[ \^3 ]== could be deeply nested, its execution jumps out all the levels and return to the method caller. 
+For example, the following expression ==BExp new jumpingOut== will return 3 and not 42. ==\^ 42== will never be reached. The expression ==[ \^3 ]== could be deeply nested, its execution jumps out all the levels and return to the method caller. 
 Some old code (predating introduction of exceptions) passes non-local returning blocks around leading to complex flows and difficult to maintain code. 
 We strongly suggest not using this style because it leads to complex code and bugs.
 In subsequent sections we will carefully look at where a return is actually returning.
@@ -504,14 +526,14 @@ Now to see that a return is really escaping the current execution, let us build 
 Note that to stress the escaping behavior of a return we defined ==evaluatingBlock:== so that it endlessly loops after evaluating its argument.
 
 [[[
-Bexp >> start
+BExp >> start
 	| res |
 	self traceCr: 'start start'.
 	res := self defineBlock.
 	self traceCr: 'start end'.
 	^ res
 
-Bexp >> defineBlock
+BExp >> defineBlock
 	| res |
 	self traceCr: 'defineBlock start'.
 	res := self arg: [ self traceCr: 'block start'.
@@ -520,14 +542,14 @@ Bexp >> defineBlock
 	self traceCr: 'defineBlock end'.
 	^ res
 
-Bexp >> arg: aBlock
+BExp >> arg: aBlock
 	| res |
 	self traceCr: 'arg start'.
 	res := self executeBlock: aBlock.
 	self traceCr: 'arg end'.
 	^ res
 
-Bexp >> executeBlock: aBlock
+BExp >> executeBlock: aBlock
 	| res |
 	self traceCr: 'executeBlock start'.
 	res := self executeBlock: aBlock value.
@@ -536,7 +558,7 @@ Bexp >> executeBlock: aBlock
 ]]]
 
 
-Executing ==Bexp new start==  prints the following (indentation added to stress the calling flow).
+Executing ==BExp new start==  prints the following (indentation added to stress the calling flow).
 
 [[[
 start start
@@ -566,10 +588,10 @@ As shown by Figure *@nonLocalReturn*, ==[\^33]== will return to the sender of it
 - Step 5 represents the execution up to the block evaluation.  =='executeBlock start'== is printed.
 - Step 6 represents the execution of the block up to the  condition: =='block start'== is printed.
 - Step 7 represents the execution up to the return statement.
-- Step 8 represents the execution of the return statement. It returns to the sender of the block home context, \ie just after the  invocation of the method ==defineBlock== in the method ==start==. The  execution continues and =='start end'== gets printed.
+- Step 8 represents the execution of the return statement. It returns to the sender of the block home context, i.e.,  just after the  invocation of the method ==defineBlock== in the method ==start==. The  execution continues and =='start end'== gets printed.
 
 
-@@important Non local return ==[\^ ...]== returns to the sender of the block home context, \ie to the method execution point that called the one that created the block.
+@@important Non local return ==[\^ ...]== returns to the sender of the block home context, i.e.,  to the method execution point that called the one that created the block.
 
 @@important A return in a method returns a value to the sender of the method and stop executing the method containing the return. A non-local return does the same even if the block is executed by another method.
 
@@ -584,7 +606,7 @@ Note that in both cases, even if the block is executed during the execution of t
 Note that such expressions will be executed during the block evaluation.
 
 [[[
-Bexp >> defineBlock
+BExp >> defineBlock
 	| res |
 	self traceCr: 'defineBlock start'.
 	res := self arg: [ thisContext home inspect.
@@ -610,14 +632,14 @@ BlockClosure>>valuePassingEscapingBlock
 Then we define a simple ==assert:== method that raises an error if its argument is false.
 
 [[[
-Bexp>>assert: aBoolean
+BExp>>assert: aBoolean
 	aBoolean ifFalse: [Error signal]
 ]]]
 
 We define the following method.
 
 [[[
-Bexp>>testValueWithExitBreak
+BExp>>testValueWithExitBreak
 	| val |
 	[ :break |
 	    1 to: 10 do: [ :i |
@@ -627,7 +649,7 @@ Bexp>>testValueWithExitBreak
 	self assert: val = 4.
 ]]]
 
-This method defines a block whose argument ==break== is executed as soon as the step 4 of a loop is reached. A variable ==val== is then printed and we make sure that its value is 4. Executing ==Bexp new testValueWithExitBreak== performs without raising an error and prints 4 to the Transcript: the loop has been stopped, the value has been printed, and the assert has been validated.
+This method defines a block whose argument ==break== is executed as soon as the step 4 of a loop is reached. A variable ==val== is then printed and we make sure that its value is 4. Executing ==BExp new testValueWithExitBreak== performs without raising an error and prints 4 to the Transcript: the loop has been stopped, the value has been printed, and the assert has been validated.
 
 If you change the ==valuePassingEscapingBlock== message sent by ==value: [^ nil]== in the ==testValueWithExitBreak== method above, you will not get the trace because the execution of the method ==testValueWithExitBreak== will exit when the block is executed. In this case, calling ==valuePassingEscapingBlock== is not equivalent to calling ==value: [^nil]== because the home context of the escaping block ==[ ^ nil ]== is different.  With the original ==valuePassingEscapingBlock==, the home context of the block ==[^ nil]==
 is ==valuePassingEscapingBlock== and not the method ==testValueWithExitContinue== itself.
@@ -638,10 +660,10 @@ Therefore when executed, the escaping block will change the execution flow to th
  As a block is always executed in its home context, it is possible to attempt to return from a method execution which has already returned. This runtime error condition is trapped by the VM.
 
 [[[
-Bexp>>returnBlock
+BExp>>returnBlock
 	^ [ ^ self ]
 
-Bexp new returnBlock value ~-> Exception
+BExp new returnBlock value ~-> Exception
 ]]]
 
 When we execute ==returnBlock==, the method returns the block to its caller (here the top level execution). When evaluating the block, because the method defining it has already terminated and because the block is containing a return expression that should normally   return to the sender of the block home context, an error is signaled.
@@ -667,10 +689,10 @@ In Pharo, the class ==MethodContext== represents this execution information. A =
 
 !!!Interacting with Contexts
 
-Let us look at an example. Define the following method and execute it using ==Bexp new first: 33==.
+Let us look at an example. Define the following method and execute it using ==BExp new first: 33==.
 
 [[[
-Bexp>>first: arg
+BExp>>first: arg
 	| temp |
 	temp := arg * 2.
 	thisContext copy inspect.
