@@ -340,15 +340,60 @@ Now when we execute ==BExp new selfIsCapturedToo==, we get ==NBexp>>#testSelfIsC
 We show that blocks capture variables that are reached from the ''context in which the block was defined'' and not where there are executed. Blocks keep references to variable locations that can be shared between multiple blocks. 
 
 
-%stef up to here!
-
-
 
 !!!Block-local variables
 
-As we saw previously a block is a lexical closure that is connected to the place where it is defined. 
-In the following, we will illustrate this connection by showing that block local variables are allocated in the execution context link to their creation. 
-We will show the difference when a variable is local to a block or to a method (see *@blockLocalTempExecution*).
+As we saw previously a block is a lexical closure that is connected to the place where it is defined.
+In the following, we will illustrate this connection by showing that block local variables are allocated in the execution context link to their creation.
+We will show the difference when a variable is local to a block or to a method.
+
+Before implementing the interpretation of temporaries we want to show some particularities of Pharo semantics.
+Temporaries cannot shadow other temporaries.
+
+The following expression is not allowed by the compiler because the second ==tmp== definition is illegal.
+[[[
+[ 
+	| tmp |
+	tmp := 2. 
+	[
+		| tmp |
+		tmp := 3 ]]
+]]]
+
+Similarly a temporary cannot shadow a block or a method parameter.
+Therefore the following expression is not allowed.
+[[[
+[ :tmp |
+	| tmp |
+	tmp := 2]
+]]]
+
+The following method is not valid either.
+[[[
+with: arg
+
+	| arg |
+	^ arg
+]]]
+
+Finally parameters are read only.
+Therefore the following method is not valid.
+[[[
+with: arg
+	arg := 42	
+]]]
+
+As well as the following expression
+
+[[[
+[ :tmp |
+	tmp := 2
+	 ]
+]]]
+
+We can say that inside a method the names of parameters, temporaries and instance variables are flattened and use a single namespace.
+Before we would like to refresh our mind about temporaries shadowing in Pharo. 
+
 
 !!!Block allocation
 Implement the following method ==blockLocalTemp==.
@@ -364,19 +409,26 @@ BExp >> blockLocalTemp
 	^ collection collect: [ :each | each value ]
 ]]]
 
-Let's comment the code: we create a loop that stores the current index (an block argument) in a temporary variable ==temp== created in the loop. 
-We then store a block that accesses this variable in a collection. 
-After the loop, we execute each accessing block and return the collection of values. 
+Let's comment this method:
+- We create a collection to store the results of the loop iteration.
+- We create a loop that affects the current index (a block argument) in the temporary variable ==temp== created in the loop.
+- Then we store a block that accesses this variable in the collection collecting results.
+- After the loop, we execute each of the stored block of the collections and return the collection of values.
+
 If we execute this method, we get a collection with 1, 2 and 3. 
+
+[[[
+BExp >> testBlockLocalTemp
+	self assert: self blockLocalTemp asArray equals: #(1 2 3)
+]]]
+
 This result shows that each block in the collection refers to a different ==temp== variable.
-This is due to the fact that an execution context is created for each block creation (at each loop step) and that the block ==[ temp ]== is stored in this context (see Figure *@blockClosureLocalTemp*).
+This is due to the fact that a different execution context is created for each block creation (at each loop step) and that the block ==[ temp ]== is stored in this context (see Figure *@blockClosureLocalTemp*).
 
-
-+==blockLocalTemp== execution.>file://figures/blockClosureLocalTemp.pdf|label=blockClosureLocalTemp+
++==blockLocalTemp== execution.>file://figures/blockClosureLocalTemp.pdf|width=70|label=blockClosureLocalTemp+
 
 
 !!!Method allocation
-
 Now let us create a new method that is the same as ==blockLocalTemp== except that the variable ==temp== is a method variable instead of a block variable.
 
 [[[
@@ -389,9 +441,14 @@ BExp >> blockOutsideTemp
 	^ collection collect: [ :each | each value ]
 ]]]
 
+[[[
+BExp >> testBlockOutsideTemp
+	self assert: self blockOutsideTemp asArray equals: #(3 3 3)
+]]]
+
 When we execute the method ==blockOutsideTemp==, we now get a collection with 3, 3 and 3. This result shows that each block in the collection now refers to a single variable ==temp== allocated in the ==blockOutsideTemp== context leading to the fact that ==temp== is shared by the blocks (see Figure *@blockClosureOutsideTemp*).
 
-+==blockOutsideTemp== execution.>file://figures/blockClosureOutsideTemp.pdf|label=blockClosureOutsideTemp+
++==blockOutsideTemp== execution.>file://figures/blockClosureOutsideTemp.pdf|width=70|label=blockClosureOutsideTemp+
 
 
 % ============================================================================
@@ -797,7 +854,7 @@ The program counter points to the last instruction of the compiled method. Sende
 %this is appropriate, \etc. A ==MethodContext} represents an executing
 %method and has a pointer back to the context from which it was activated.
 
-+Relations between contexts and compiled methods.>file://figures/MethodAndMethodContext.pdf|label=fig:MethodAndMethodContext+
++Relations between contexts and compiled methods.>file://figures/MethodAndMethodContext.pdf|width=55|label=fig:MethodAndMethodContext+
 
 
 !!!Sketch of implementation
@@ -821,7 +878,7 @@ This approach works well if all objects are first-class objects, including the m
 Blocks can be executed outside their home context and still refer to remote variables.
 Hence all home contexts might outlive the method activation.
 
-+A first understanding of closures.>file://figures/BlockWithFullClosures.pdf|label=fig:BlockWithFullClosures+
++A first understanding of closures.>file://figures/BlockWithFullClosures.pdf|width=55|label=fig:BlockWithFullClosures+
 
 
 !!!Implementation
@@ -845,7 +902,7 @@ The Figure *@fig:BlockWithMethodContext* shows how non-local variables are no lo
 remote array which is heap allocated.
 
 
-+How the VM stores remote variables so that they continue to leave when a method returns.>file://figures/BlockWithMethodContext.pdf|label=fig:BlockWithMethodContext+
++How the VM stores remote variables so that they continue to leave when a method returns.>file://figures/BlockWithMethodContext.pdf|width=80|llabel=fig:BlockWithMethodContext+
 
 %%==========================================================================================================
 %Rest was commented
