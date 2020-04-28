@@ -339,17 +339,10 @@ Now when we execute ==BExp new selfIsCapturedToo==, we get ==NBexp>>#testSelfIsC
 !!!!!Conclusion. 
 We show that blocks capture variables that are reached from the ''context in which the block was defined'' and not where there are executed. Blocks keep references to variable locations that can be shared between multiple blocks. 
 
+!!! About temporary variables
+Before looking at how block temporaries are managed we propose a little review of temporary variable aspects in Pharo. 
 
-
-!!!Block-local variables
-
-As we saw previously a block is a lexical closure that is connected to the place where it is defined.
-In the following, we will illustrate this connection by showing that block local variables are allocated in the execution context link to their creation.
-We will show the difference when a variable is local to a block or to a method.
-
-Before implementing the interpretation of temporaries we want to show some particularities of Pharo semantics.
 Temporaries cannot shadow other temporaries.
-
 The following expression is not allowed by the compiler because the second ==tmp== definition is illegal.
 [[[
 [ 
@@ -371,7 +364,6 @@ Therefore the following expression is not allowed.
 The following method is not valid either.
 [[[
 with: arg
-
 	| arg |
 	^ arg
 ]]]
@@ -392,11 +384,15 @@ As well as the following expression
 ]]]
 
 We can say that inside a method the names of parameters, temporaries and instance variables are flattened and use a single namespace.
-Before we would like to refresh our mind about temporaries shadowing in Pharo. 
 
+!!!Block-local variables
+As we saw previously a block is a lexical closure that is connected to the place where it is defined.
+In the following, we will illustrate this connection by showing that block local variables are allocated in the execution context linked to their creation.
+We will show the difference when a temporary variable is local to a block or to a method.
 
-!!!Block allocation
-Implement the following method ==blockLocalTemp==.
+!!!!Block allocation
+The following method ==blockLocalTemp== stores in a collection a block referencing a temporary for each index of the iteration. 
+It is interesting since it shows that each single block will have its own home context and allocation of the temporary variable ==temp==. 
 
 [[[
 BExp >> blockLocalTemp
@@ -410,12 +406,12 @@ BExp >> blockLocalTemp
 ]]]
 
 Let's comment this method:
-- We create a collection to store the results of the loop iteration.
-- We create a loop that affects the current index (a block argument) in the temporary variable ==temp== created in the loop.
-- Then we store a block that accesses this variable in the collection collecting results.
-- After the loop, we execute each of the stored block of the collections and return the collection of values.
+- It creates a collection to store the results of the loop.
+- It defines a loop that assigns the current index (a block argument) in the temporary variable ==temp== defined in the loop block.
+- Then its stores a block that accesses this variable in the collection collecting results.
+- After the loop ends, it executex each of the stored blocks of the collection and return the collection of values.
 
-If we execute this method, we get a collection with 1, 2 and 3. 
+Executing this method results in a collection with 1, 2 and 3. 
 
 [[[
 BExp >> testBlockLocalTemp
@@ -425,10 +421,10 @@ BExp >> testBlockLocalTemp
 This result shows that each block in the collection refers to a different ==temp== variable.
 This is due to the fact that a different execution context is created for each block creation (at each loop step) and that the block ==[ temp ]== is stored in this context (see Figure *@blockClosureLocalTemp*).
 
-+==blockLocalTemp== execution.>file://figures/blockClosureLocalTemp.pdf|width=70|label=blockClosureLocalTemp+
++==blockLocalTemp== execution: each block created during a loop step has its own home context.>file://figures/blockClosureLocalTemp.pdf|width=70|label=blockClosureLocalTemp+
 
 
-!!!Method allocation
+!!!!Method allocation
 Now let us create a new method that is the same as ==blockLocalTemp== except that the variable ==temp== is a method variable instead of a block variable.
 
 [[[
@@ -446,37 +442,37 @@ BExp >> testBlockOutsideTemp
 	self assert: self blockOutsideTemp asArray equals: #(3 3 3)
 ]]]
 
-When we execute the method ==blockOutsideTemp==, we now get a collection with 3, 3 and 3. This result shows that each block in the collection now refers to a single variable ==temp== allocated in the ==blockOutsideTemp== context leading to the fact that ==temp== is shared by the blocks (see Figure *@blockClosureOutsideTemp*).
+When we execute the method ==blockOutsideTemp==, we now get a collection with 3, 3 and 3. This result shows that each block in the collection now refers to a single variable ==temp== allocated in the method ==blockOutsideTemp== context. This  leads to the fact that ==temp== is shared by the blocks (see Figure *@blockClosureOutsideTemp*).
 
-+==blockOutsideTemp== execution.>file://figures/blockClosureOutsideTemp.pdf|width=70|label=blockClosureOutsideTemp+
++==blockOutsideTemp== execution: one context is shared by all the blocks created in the loop step.>file://figures/blockClosureOutsideTemp.pdf|width=70|label=blockClosureOutsideTemp+
 
 
 % ============================================================================
 !!!Variables can outlive their defining method
-% ============================================================================
 
 Non-block local variables referred to by a block continue to be accessible and shared with other expressions even if the method execution terminated. 
 We say that variables ''outlive'' the method execution that defined them.
 Let's look at some examples.
 
-!!!! Method-Block Sharing.
- We start with a simple example showing that a variable is shared between a method and a block (as in the previous experiments in fact). Define the following method ==foo== which defines a temporary variable ==a==.
+We start with a simple example showing that a variable is shared between a method and a block (as in the previous experiments in fact). 
+ Define the following method ==foo== which defines a temporary variable ==a==.
 
 [[[
-BExp>>foo
+BExp >> sharing
 	| a |
 	[ a := 0 ] value.
 	^ a
 ]]]
 
 [[[
-BExp new foo
+BExp new sharing
 >>> 0	
 ]]]
 
-When we execute ==BExp new foo==, we get 0 and not nil.
-What you see here  is that the value is shared between the method body and the block. Inside the method body we can access the variable whose value was set by the block evaluation.
-Both the method  and block bodies access the same temporary variable ==a==.
+When we execute ==BExp new sharing==, we get 0 and not ==nil==.
+What you see here  is that the value is shared between the method body and the block. 
+Inside the method body we can access the variable whose value was set by the block execution.
+Both the method and block bodies access the same temporary variable ==a==.
 
 Let's make it slightly more complicated. Define the method ==twoBlockArray== as follows:
 
@@ -487,35 +483,27 @@ BExp >> twoBlockArray
 	^ {[ a := 2] . [a]}
 ]]]
 
-The method ==twoBlockArray== defines a temporary variable ==a==. It sets the value of ==a==
-to zero and returns an array whose first element is a block setting the value of ==a== to 2 and second element is a block just returning the value of the temporary variable ==a==.
+The method ==twoBlockArray== defines a temporary variable ==a==. 
+It sets the value of ==a== to zero and returns an array whose first element is a block setting the value of ==a== to 2 and second element is a block just returning the value of the temporary variable ==a==.
 
 Now we store the array returned by ==twoBlockArray== and execute the blocks stored in the array.
-This is what the following code snippet is doing.
+This is what the following test is doing.
 
 [[[
-| res |
-res := BExp new twoBlockArray.
-res second value. 
->>> 0
-res first value.
-res second value. 
->>> 2
+BExp >> testTwoBlockArray
+	| array |
+	array := self twoBlockArray.
+	self assert: array second value equals: 0.
+
+	array first value.
+	self assert: array second value equals: 2
 ]]]
 
-You can also define the code as follows and open a transcript to see the results.
-
-[[[
-| res |
-res := BExp new twoBlockArray.
-res second value traceCr.
-res first value.
-res second value traceCr.
-]]]
 
 Let us step back and look at an important point.
-In the previous code snippet when the expressions ==res second value== and ==res first value== are executed, the method ==twoBlockArray== has already finished its execution - as such it is not on the execution stack anymore. 
+In the previous test when the expressions ==array second value== and ==array first value== are executed, the method ==twoBlockArray== has already finished its execution - as such it is not on the execution stack anymore. 
 Still the temporary variable ==a== can be accessed and set to a new value.
+
 This experiment shows that the variables referred to by a block may live longer than the method which created the block that refers to them.
 We say that the variables outlive the execution of their defining method.
 
@@ -523,72 +511,83 @@ You can see from this example that while temporary variables are somehow stored 
 The block implementation needs to keep referenced variables in a structure that is not in the execution stack but lives on the heap.
 The compiler performs some analysis and when it detects that a variable may outlive its creation context, it allocates the variables in a structure that is not allocated on the execution stack. 
 
+%stef here!
 % ============================================================================
 !!!Returning from inside a block
-% ============================================================================
-In this section we explain why it is  not a good idea to have return statements inside a block (such as ==[^ 33]==) that you pass or store into instance variables.
-A block with an explicit return statement is called a ''non-local returning block''. 
-Let us start illustrating some basic points first.
 
-!!! Basics on return
+In this section we explain why it is not a good idea to have return statements inside a block (such as ==[^ 33]==) that you pass to other methods (except conditional) or store into instance variables. A block with an explicit return statement is called a ''non-local returning block''. 
 
-By default the returned value of a method is the receiver of the message i.e., ==self==.
-A return expression (the expression starting with the character ==\^==) allows one to return a different value than the receiver of the message. 
-In addition, the execution of a return statement exits the currently executed method and returns to its caller. 
+Let us start illustrating some really basic points first.
+By default, the returned value of a method is the receiver of the message i.e., ==self==.
+A return expression (the expression starting with the character ==\^==) allows one to return a different value than the receiver of the message.
+In addition, the execution of a return statement exits the currently executed method and returns to its caller.
 This ignores the expressions following the return statement.
 
-
-!!!Experiment 7: Return's Exiting Behavior
-
-Define the following method. Executing ==BExp new testExplicitReturn==  prints 'one' and 'two' but it will not print ==not printed==, since the method ==testExplicitReturn== will have returned before.
+!!!Experiment 7: Return's exiting behavior
+Define the following method. Executing ==BExp new withExplicitReturn==  returnn 'one' and 'two' but it will not print ==not printed==, since the method ==withExplicitReturn== will have returned before.
 
 [[[
-BExp >> testExplicitReturn
-	self traceCr: 'one'.
-	0 isZero ifTrue: [ self traceCr: 'two'. ^ self].
-	self traceCr: 'not printed'
+BExp >> withExplicitReturn
+	^ String streamContents: [:str | 
+		str nextPutAll: 'one'; cr.
+		0 isZero ifTrue: [ str nextPutAll: 'two'. ^ str contents ].
+		str nextPutAll: 'not printed']
+]]]
+
+
+[[[
+BExp >> testWithExplicitReturn
+	self assert: self withExplicitReturn equals: 'one
+	two'
 ]]]
 
 Note that the return expression should be the last statement of a block body.
 
-%Finally, in Smalltalk, ==^} should be the last statement of a block body. You should get a compile error if you type and compile the following expression.
-%
-%[[[
-%[ self traceCr: 'two'.
-%  ^ self.
-%  self traceCr: 'not printed' ]
-%
-%    ~-> End of block expected ->
-%]]]
-
 
 !!!Escaping behavior of non-local return
-
 A return expression behaves also like an escaping mechanism since the execution flow will directly jump out to the current invoking method. 
 Let us define a new method ==jumpingOut== as follows to illustrate this behavior.
 
 [[[
 BExp >> jumpingOut
 	#(1 2 3 4) do: [:each |
-					self traceCr: each printString.
 					each = 3
 						ifTrue: [^ 3]].
 	^ 42
 ]]]
 [[[	
-BExp new jumpingOut
->>> 3
+BExp >> testJumpingOut
+	self assert: self jumpingOut equals: 3
 ]]]
 
-
-For example, the following expression ==BExp new jumpingOut== will return 3 and not 42. ==\^ 42== will never be reached. The expression ==[ \^3 ]== could be deeply nested, its execution jumps out all the levels and return to the method caller. 
+The  expression ==BExp new jumpingOut== will return 3 and not 42. The expression ==\^ 42== will never be reached. The expression ==[ \^3 ]== could be deeply nested, its execution jumps out all the levels and returns to the method caller. 
 Some old code (predating introduction of exceptions) passes non-local returning blocks around leading to complex flows and difficult to maintain code. 
 We strongly suggest not using this style because it leads to complex code and bugs.
 In subsequent sections we will carefully look at where a return is actually returning.
 
 !!!Understanding return
-Now to see that a return is really escaping the current execution, let us build a slightly more complex call flow. We define four methods among which one (==defineBlock==) creates an escaping block,  one (==arg:==) executes this block and one (==evaluatingBlock:==) that executes the block. 
-Note that to stress the escaping behavior of a return we defined ==evaluatingBlock:== so that it endlessly loops after evaluating its argument.
+Now to see that a return is really escaping the current execution, let us build a slightly more complex call flow. 
+
+First we add and initialize an instance variable named: ==stream== and some helper methods to access the stream.
+
+[[[
+BExp >> initialize
+	x := 123.
+	stream := '' writeStream 
+]]]
+
+[[[
+BExp >> traceCr: aString
+	stream nextPutAll: aString; cr
+]]]
+
+[[[
+BExp >> contents
+	^ stream contents
+]]]
+
+We define four methods among which one (==defineBlock==) creates an escaping block,  one (==arg:==) executes this block and one (==executeBlock:==) that executes the block. 
+Note that to stress the escaping behavior of a return we defined ==executeBlock:== so that it endlessly loops after executing its argument.
 
 [[[
 BExp >> start
@@ -597,7 +596,9 @@ BExp >> start
 	res := self defineBlock.
 	self traceCr: 'start end'.
 	^ res
+]]]
 
+[[[
 BExp >> defineBlock
 	| res |
 	self traceCr: 'defineBlock start'.
@@ -606,14 +607,18 @@ BExp >> defineBlock
                             self traceCr: 'block end'. ].
 	self traceCr: 'defineBlock end'.
 	^ res
+]]]
 
+[[[
 BExp >> arg: aBlock
 	| res |
 	self traceCr: 'arg start'.
 	res := self executeBlock: aBlock.
 	self traceCr: 'arg end'.
 	^ res
+]]]
 
+[[[
 BExp >> executeBlock: aBlock
 	| res |
 	self traceCr: 'executeBlock start'.
@@ -622,8 +627,7 @@ BExp >> executeBlock: aBlock
 	^  res
 ]]]
 
-
-Executing ==BExp new start==  prints the following (indentation added to stress the calling flow).
+Executing ==BExp new start; contents==  prints the following (indentation added to stress the calling flow).
 
 [[[
 start start
@@ -636,12 +640,11 @@ start end
 
 What we see is that the calling method ==start== is fully executed.
 The method ==defineBlock== is not completely executed. Indeed, its escaping block ==[\^33]== is executed two calls away in the method ==executeBlock:==.
-The evaluation of the block returns to the ''block home context sender'' (i.e., the context that invoked the method creating the block).
+The execution of an escaping block returns to the ''sender of its home context sender'' (i.e., the context that invoked the method that created the block). In our example, the home context of ==[]\^33]== is the method ==defineBlock== so its execution will return to ==start==.
 
 When the return statement of the block is executed in the method ==executeBlock:==, the execution discards the pending computation and returns to the ''method execution point that created the home context of the block''. The block is defined in  the method ==defineBlock==. The home context of the block is the activation context that represents the definition of the method ==defineBlock==. Therefore the return expression returns to the ==start== method execution just after the ==defineBlock== execution. This is why the pending executions of ==arg:== and ==executeBlock:== are discarded and why we see the execution of the method ==start== end.
 
 +A block with non-local return execution returns to the method execution that activated the block home context. Frames represent contexts and dashed frames represent the same block at different execution points.>file://figures/nonLocalReturn2.pdf|label=nonLocalReturn+
-
 
 As shown by Figure *@nonLocalReturn*, ==[\^33]== will return to the sender of its home context. 
 ==[\^33]== home context is the context that represents the execution of the method ==defineBlock==, therefore it will return its result to the method ==start==.
@@ -902,7 +905,47 @@ The Figure *@fig:BlockWithMethodContext* shows how non-local variables are no lo
 remote array which is heap allocated.
 
 
-+How the VM stores remote variables so that they continue to leave when a method returns.>file://figures/BlockWithMethodContext.pdf|width=80|llabel=fig:BlockWithMethodContext+
++How the VM stores remote variables so that they continue to leave when a method returns.>file://figures/BlockWithMethodContext.pdf|width=80|label=fig:BlockWithMethodContext+
+
+
+!!! Full block implementation
+
+The full block term refers to the new implementation of blocks made my C. Béra and E. Miranda to avoid 
+
+[[[
+CompilationContext bytecodeBackend: EncoderForSistaV1.
+CompilationContext optionFullBlockClosure: true.
+NBexp recompile: #blockLocalTemp.
+(NBexp >> #blockLocalTemp) inspect
+]]]
+
+[[[
+blockLocalTemp
+	| collection |
+	collection := OrderedCollection new.
+	#(1 2 3) do: [ :index |
+		| temp |
+		temp := index.
+		collection add: [ temp ] ].
+	^ collection collect: [ :each | each value ]
+]]]
+
+
+[[[
+65 <10> pushLit: OrderedCollection
+66 <7C> send: new
+67 <D0> popIntoTemp: 0
+68 <21> pushConstant: #(1 2 3)
+69 <40> pushTemp: 0
+70 <F9 02 01> fullClosure:compiledBlockNumCopied: 1
+73 <7B> send: do:
+74 <D8> pop
+75 <40> pushTemp: 0
+76 <F9 03 00> fullClosure:compiledBlockNumCopied: 0
+79 <94> send: collect:
+80 <5C> returnTop
+]]]
+
 
 %%==========================================================================================================
 %Rest was commented
