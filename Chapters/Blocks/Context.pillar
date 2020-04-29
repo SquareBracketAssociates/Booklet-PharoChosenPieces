@@ -1,0 +1,318 @@
+!! A First Look at Context
+
+
+!!!Contexts: representing method execution
+
+We saw that blocks refer to the home context when looking for variables. So now we will look at contexts. Contexts represent program execution. The Pharo execution engine represents its current execution state with the following information:
+
+# the ==CompiledMethod== whose bytecodes are being executed;
+# the location of the next bytecode to be executed in that ==CompiledMethod==. This is the interpreter's program pointer;
+# the receiver and arguments of the message that invoked the ==CompiledMethod==;
+# any temporary variable needed by the ==CompiledMethod==;
+# a call stack.
+
+
+In Pharo, the class ==MethodContext== represents this execution information. A ==MethodContext== instance holds information about a specific execution point.  The pseudo-variable ==thisContext== gives access to the current execution point.
+
+!!!Interacting with Contexts
+
+Let us look at an example. Define the following method and execute it using ==BExp new first: 33==.
+
+[[[
+BExp >> first: arg
+	| temp |
+	temp := arg * 2.
+	thisContext copy inspect.
+	^ temp
+]]]
+
+You will get the inspector shown in Figure *@oneContext*. 
+Note that we copy the current context obtained using ==thisContext== because the Virtual Machine limits memory consumption by reusing contexts.
+
++A method context where we can access the value of the temporary variable ==temp== at that given point of execution.>file://figures/OneContext.png|label=oneContext+
+
+==MethodContext== does not only represent activation context of method execution but also the ones for blocks. Let us have a look at some values of the current context:
+- ==sender== points to the previous context that led to the creation of the current one. Here when you executed the expression, a context was created and this context is the sender of the current one.
+- ==method== points to the currently executing method.
+- ==pc== holds a reference to the latest executed instruction. Here its value is 27. To see which instruction is referred to, double click on the ==method== instance variable and select the ==all bytecodes== field, you should get the situation depicted in Figure *@ByteCodes*, which shows that the next instruction to be executed is ==pop== (instruction 28).
+- ==stackp== defines the depth of the stack of variables in the context. In most cases, its value is the number of stored temporary variables (including arguments). But in certain cases, for example during a message send, the depth of the stack is increased: the receiver is pushed, then the arguments, lastly the message send is executed and the depth of the stack goes back to its previous value.
+- ==closureOrNil== holds a reference to the currently executing closure or nil.
+- ==receiver== is the message receiver.
+
++The pc variable holds 27 because the last (bytecode) instruction executed was the message send ==inspect==.>file://figures/ByteCodes.png|label=ByteCodes+
+	
+
+The class ==MethodContext== and its superclasses define many methods to get information about a particular context. For example, you can get the values of the arguments by sending the ==arguments== message and the value of a particular temporary variable by sending ==tempNamed:==.
+
+
+!!! Block nesting and contexts
+Now let us look at the case of block nesting and its impact on home contexts.
+In fact, a block points to a context when it was created: it is its ''outer context''. Now depending on the situation the outer context of a block can be its home context or not. 
+This is not complex: Each block is created inside some context.  This is the block's outer context. The outer context is the direct context in which a block was created. The home context is the one at the method level. 
+If the block is not nested then the outer context is also  the block home context.
+
+If the block is nested inside another block execution, then the outer context refers to that block execution context, and the block execution's outerContext is the home context.  There are as many outer context steps as there are nesting levels.
+
+Let's look at the following example. When you execute, just press Ok to the dialogs popping up.
+
+[[[
+| homeContext b1 |
+homeContext := thisContext.
+b1 := [| b2 |
+          self assert: thisContext closure == b1.
+          self assert: b1 outerContext == homeContext.
+	      self assert: b1 home = homeContext.
+          b2 := [self assert: thisContext closure == b2.
+                  self assert: b2 outerContext closure outerContext == homeContext].
+		     	  self assert: b2 home = homeContext.
+          b2 value].
+b1 value 
+]]]
+
+
+- First we set in ==homeContext==, the context before the block creation. ==homeContext== is the home context of the blocks ==b1== and ==b2== because they are defined during this execution.
+- ==thisContext closure b1== shows that the context inside the execution of the block ==b1== has a pointer to ==b1==. The outer context of ==b1== is ==homeContext==. Nothing new because ==b1== is defined during the execution starting after the assignment. The home context of ==b1== is the same as its outer context.
+- Inside ==b2== execution, the current context points to ==b2== itself since it is a closure. The outer context of the closure in which ==b2== is defined i.e., ==b1== points to ==homeContext==. Finally the home context of ==b2== is ==homeContext==. This last point shows that all the nested blocks have a separate outer context, but they share the same home context.
+
+
+% ============================================================================
+!!!Message execution
+% ============================================================================
+
+The Virtual Machine represents execution state as context objects, one per method or block currently executed (the word ''activated'' is also used). In Pharo, method and block executions are represented by ==MethodContext== instances. In the rest of this chapter we survey contexts, method execution, and block closure execution.
+
+!!!Sending a message
+
+To send a message to a receiver, the VM has to:
+
+- Find the class of the receiver using the receiver object's header.
+- Lookup the method in the class method dictionary. If the method is not found, repeat this lookup in each superclass. When no class in the superclass chain can understand the message, the VM sends the message ==doesNotUnderstand:== to the receiver so that the error  can be handled in a manner appropriate to that object.
+- When an appropriate method is found:
+# check for a primitive associated with the method by reading the method header;
+# if there is a primitive, execute it;
+# if the primitive completes successfully, return the result object to the message sender;
+# when there is no primitive or the primitive fails, continue to  the next step.
+- Create a new context. Set up the program counter, stack pointer, home contexts, then copy the arguments and receiver from the message  sending context's stack to the new stack.
+- Activate that new context and start executing the instructions  in the new method.
+
+The execution state before the message send must be remembered because the instructions after the message send must be executed when the
+message returns. 
+State is saved using contexts. 
+There will be many contexts in the system at any time.
+The context that represents the current state of execution is called the active context.
+
+When a message send happens in the active context, the active context is suspended and a new context is created and activated.
+The suspended context retains the state associated with the original compiled method until that context becomes active again. 
+A context must remember the context that it suspended so that the suspended context can be resumed when a result is returned.
+The suspended context is called the new context's sender.
+Figure *@fig:MethodAndMethodContext* represents the relations between compiled methods and context.
+The method points to the currently executed method.
+
+The program counter points to the last instruction of the compiled method. Sender points to the context that was previously active.  
+
+%A context, also called activation record, is an object representing a
+%given execution state just like a C stack represents execution of a C
+%program. A context maintains a program counter, the method for which
+%this is appropriate, \etc. A ==MethodContext} represents an executing
+%method and has a pointer back to the context from which it was activated.
+
++Relations between contexts and compiled methods.>file://figures/MethodAndMethodContext.pdf|width=55|label=fig:MethodAndMethodContext+
+
+
+!!!Sketch of implementation
+
+Temporaries and arguments for blocks are handled the same way as in methods.
+Arguments are passed on the stack and temporaries are held in the corresponding context.
+Nevertheless, a block can access more variables than a method:
+a block can refer to arguments and temporaries from the enclosing method.
+As we have seen before, blocks can be passed around freely and activated at any time.
+In all cases, the block can access and modify the variables from the method it was defined in.
+
+
+%\subsection{Optimizing the stack in the VM}
+
+Let us consider the example shown in Figure *@fig:BlockWithFullClosures*.
+The ==temp== variable used in the block of the ==exampleReadInBlock== method is non-local or remote variable.
+==temp== is initialized and changed in the method body and later on read in the block.
+The actual value of the variable is not stored in the block context but in the defining method context, also known as home context.
+In a typical implementation the home context of a block is accessed through its closure.
+This approach works well if all objects are first-class objects, including the method and block context.
+Blocks can be executed outside their home context and still refer to remote variables.
+Hence all home contexts might outlive the method activation.
+
++A first understanding of closures.>file://figures/BlockWithFullClosures.pdf|width=55|label=fig:BlockWithFullClosures+
+
+
+!!!Implementation
+
+The previously mentioned approach for block contexts has disadvantages from a low-level point of view.
+If method and block contexts are normal objects that means they have to be garbage collected at some point. 
+Combined with the typical coding practice of using small methods that call many other objects, Pharo can generate a lot of contexts.
+
+The most efficient way to deal with method contexts is to not create them at all.
+At the VM level, this is done by using real stack frames.
+Method contexts can be easily mapped to stack frames: whenever we call a method we create a new frame, whenever we return from a method we delete the current frame. In that matter Pharo is not very different from C.
+This means whenever we return from a method the method context (stack frame) is immediately removed. Hence no high-level garbage collection is needed.
+Nevertheless, using the stack gets much more complicated when we have to support blocks.
+
+As  mentioned before, method contexts that are used as home contexts might outlive their activation.
+If method contexts work as we explained up to now we would have to check each time for home contexts if a stack frame is removed.
+This comes with a big performance penalty.
+Hence the next step in using a stack for contexts is to make sure method contexts can be safely removed when we return from a method.
+
+The Figure *@fig:BlockWithMethodContext* shows how non-local variables are no longer directly stored in the home context, but in a separate
+remote array which is heap allocated.
+
+
++How the VM stores remote variables so that they continue to leave when a method returns.>file://figures/BlockWithMethodContext.pdf|width=80|label=fig:BlockWithMethodContext+
+
+
+!!! Full block implementation
+
+The full block term refers to the new implementation of blocks made my C. Béra and E. Miranda to avoid 
+
+[[[
+CompilationContext bytecodeBackend: EncoderForSistaV1.
+CompilationContext optionFullBlockClosure: true.
+NBexp recompile: #blockLocalTemp.
+(NBexp >> #blockLocalTemp) inspect
+]]]
+
+[[[
+blockLocalTemp
+	| collection |
+	collection := OrderedCollection new.
+	#(1 2 3) do: [ :index |
+		| temp |
+		temp := index.
+		collection add: [ temp ] ].
+	^ collection collect: [ :each | each value ]
+]]]
+
+
+[[[
+65 <10> pushLit: OrderedCollection
+66 <7C> send: new
+67 <D0> popIntoTemp: 0
+68 <21> pushConstant: #(1 2 3)
+69 <40> pushTemp: 0
+70 <F9 02 01> fullClosure:compiledBlockNumCopied: 1
+73 <7B> send: do:
+74 <D8> pop
+75 <40> pushTemp: 0
+76 <F9 03 00> fullClosure:compiledBlockNumCopied: 0
+79 <94> send: collect:
+80 <5C> returnTop
+]]]
+
+
+%%==========================================================================================================
+%Rest was commented
+% \subsection{Reading Remote Variables in a TemporaryVector}
+% The following example defines a block that read a temporary variable from its enclosing block.
+% [[[
+%   exampleReadInBlock
+%   | readOnlyInBlock |
+%   readOnlyInBlock := #readOnlyInBlock.
+%   ^ [ readOnlyInBlock ] value
+% ]]]
+
+
+
+% \subsection{Optimizing read-only Temporaries accessed from a Block}
+% The bytecodes for this method look as follows.
+% [[[
+%   pushConstant: #readOnlyInBlock
+%   popIntoTemp: 0
+%   pushTemp: 0
+
+%   closureNumCopied: 1 numArgs: 0 bytes 24 to 25
+%   pushTemp: 0
+%   blockReturn
+
+%   send: value
+%   returnTop
+% ]]]
+
+
+% \subsection{More Examples}
+% [[[
+%   exampleWrittenInBlock
+%   | writtenInBlock |
+%   [ writtenInBlock := #foo ] value.
+%   ^ writtenInBlock
+% ]]]
+
+% [[[
+%   exampleTempNamedPut
+%   | externalViciouslyWritten |
+%   externalViciouslyWritten := #external.
+%   [ thisContext tempNamed: #externalViciouslyWritten put: #internal. externalViciouslyWritten ] value.
+%   ^ externalViciouslyWritten
+% ]]]
+
+% too many arguments for blocks
+% 
+%| last |
+%last := thisContext.
+%thisContext runSimulated: [#(1 2 3) detect: [:e| e even]] contextAtEachStep: [:c| c ~~ last ifTrue: [Transcript print: c; cr; flush. last := c]]
+%
+%=>
+%
+%[] in UndefinedObject>>DoIt
+%Array(Collection)>>detect:
+%Array(Collection)>>detect:ifNone:
+%Array(SequenceableCollection)>>do:
+%[] in Array(Collection)>>detect:ifNone:
+%[] in [] in UndefinedObject>>DoIt
+%SmallInteger>>even
+%[] in [] in UndefinedObject>>DoIt
+%[] in Array(Collection)>>detect:ifNone:
+%Array(SequenceableCollection)>>do:
+%[] in Array(Collection)>>detect:ifNone:
+%[] in [] in UndefinedObject>>DoIt
+%SmallInteger>>even
+%[] in [] in UndefinedObject>>DoIt
+%[] in Array(Collection)>>detect:ifNone:
+%Array(Collection)>>detect:
+%[] in UndefinedObject>>DoIt
+%
+%
+%or...
+%+
+%
+%| last home indent |
+%last := nil.
+%home := thisContext.
+%indent := 0.
+%thisContext
+%	runSimulated: [#(1 2 3) detect: [:e| e even]]
+%	contextAtEachStep:
+%		[:c| | ctxt |
+%		c ~~ last ifTrue:
+%			[last := c.
+%			 indent := 0. ctxt := c sender.
+%			 [ctxt ~~ home] whileTrue:
+%				[ctxt := ctxt sender. indent := indent + 1].
+%			Transcript crtab: indent; print: c; flush]]
+%
+%[] in UndefinedObject>>DoIt
+%	Array(Collection)>>detect:
+%		Array(Collection)>>detect:ifNone:
+%			Array(SequenceableCollection)>>do:
+%				[] in Array(Collection)>>detect:ifNone:
+%					[] in [] in UndefinedObject>>DoIt
+%						SmallInteger>>even
+%					[] in [] in UndefinedObject>>DoIt
+%				[] in Array(Collection)>>detect:ifNone:
+%			Array(SequenceableCollection)>>do:
+%				[] in Array(Collection)>>detect:ifNone:
+%					[] in [] in UndefinedObject>>DoIt
+%						SmallInteger>>even
+%					[] in [] in UndefinedObject>>DoIt
+%				[] in Array(Collection)>>detect:ifNone:
+%	Array(Collection)>>detect:
+%[] in UndefinedObject>>DoIt
+%
+
+
