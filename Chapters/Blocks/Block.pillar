@@ -565,6 +565,9 @@ Some old code (predating introduction of exceptions) passes non-local returning 
 We strongly suggest not using this style because it leads to complex code and bugs.
 In subsequent sections we will carefully look at where a return is actually returning.
 
+
+@@important A return in a method returns a value to the sender of the method and stop executing the method containing the return. A non-local return does the same even if the block is executed by another method.
+
 !!!Understanding return
 Now to see that a return is really escaping the current execution, let us build a slightly more complex call flow. 
 
@@ -640,31 +643,28 @@ start end
 
 What we see is that the calling method ==start== is fully executed.
 The method ==defineBlock== is not completely executed. Indeed, its escaping block ==[\^33]== is executed two calls away in the method ==executeBlock:==.
-The execution of an escaping block returns to the ''sender of its home context sender'' (i.e., the context that invoked the method that created the block). In our example, the home context of ==[]\^33]== is the method ==defineBlock== so its execution will return to ==start==.
+The execution of an escaping block returns to the ''sender of its home context sender'' (i.e., the context that invoked the method that created the block). In our example, the home context of ==[\^33]== is the method ==defineBlock== so its execution will return to ==start==.
 
 When the return statement of the block is executed in the method ==executeBlock:==, the execution discards the pending computation and returns to the ''method execution point that created the home context of the block''. The block is defined in  the method ==defineBlock==. The home context of the block is the activation context that represents the definition of the method ==defineBlock==. Therefore the return expression returns to the ==start== method execution just after the ==defineBlock== execution. This is why the pending executions of ==arg:== and ==executeBlock:== are discarded and why we see the execution of the method ==start== end.
 
-+A block with non-local return execution returns to the method execution that activated the block home context. Frames represent contexts and dashed frames represent the same block at different execution points.>file://figures/nonLocalReturn2.pdf|label=nonLocalReturn+
++A block with non-local return execution returns to the method execution that activated the block home context. Dashed bevelled rectangles represent the same block at different execution points.>file://figures/nonLocalReturn2.pdf|label=nonLocalReturn+
+
+
+@@important Non local return ==[\^ ...]== returns to the sender of the block home context, i.e.,  to the method execution point that called the one that created the block.
 
 As shown by Figure *@nonLocalReturn*, ==[\^33]== will return to the sender of its home context. 
 ==[\^33]== home context is the context that represents the execution of the method ==defineBlock==, therefore it will return its result to the method ==start==.
 
 
-- Step 1 represents the execution up to the invocation of the method ==defineBlock==. The trace =='start start'== is printed.
-- Step 3 represents the execution up to the block creation, which is done in Step 2. =='defineBlock start'== is printed. The home context  of the block is the ==defineBlock== method execution context.
-- Step 4 represents the execution up to the invocation of the method ==executeBlock:==. =='arg start'== is printed.
-- Step 5 represents the execution up to the block evaluation.  =='executeBlock start'== is printed.
-- Step 6 represents the execution of the block up to the  condition: =='block start'== is printed.
-- Step 7 represents the execution up to the return statement.
-- Step 8 represents the execution of the return statement. It returns to the sender of the block home context, i.e.,  just after the  invocation of the method ==defineBlock== in the method ==start==. The  execution continues and =='start end'== gets printed.
+- Step a represents the execution up to the invocation of the method ==defineBlock==. The trace =='start start'== is printed.
+- Step c represents the execution up to the block creation, which is done in Step b. =='defineBlock start'== is printed. The home context  of the block is the ==defineBlock== method execution context.
+- Step d represents the execution up to the invocation of the method ==executeBlock:==. =='arg start'== is printed.
+- Step e represents the execution up to the block evaluation.  =='executeBlock start'== is printed.
+- Step f represents the execution of the block up to the  condition: =='block start'== is printed.
+- Step g represents the execution up to the return statement.
+- Step h represents the execution of the return statement. It returns to the sender of the block home context, i.e.,  just after the  invocation of the method ==defineBlock== in the method ==start==. The  execution continues and =='start end'== gets printed.
 
-
-@@important Non local return ==[\^ ...]== returns to the sender of the block home context, i.e.,  to the method execution point that called the one that created the block.
-
-@@important A return in a method returns a value to the sender of the method and stop executing the method containing the return. A non-local return does the same even if the block is executed by another method.
-
-
-!!!Accessing information
+!!! Accessing context information
 
 To manually verify and find the home context of a block we can do the following: 
 Add the expression ==thisContext home inspect== in the block of the  method ==defineBlock==. 
@@ -685,50 +685,61 @@ BExp >> defineBlock
 	^ res
 ]]]
 
-To verify where the execution will end, you can use the expression ==thisContext home sender copy inspect.== which returns a method context pointing to the assignment in the method ==start==.
+To verify where the execution will end, you can use the expression ==thisContext home sender copy inspect== which returns a method context pointing to the assignment in the method ==start==.
 
 !!!Couple more examples
-
-The following examples show that escaping blocks jump to sender of their home contexts. The previous example shows that the method ==start== was fully executed.
+The previous example shows that the method ==start== was fully executed.
+The following examples show that escaping blocks jump to sender of their home contexts. 
 We define ==valuePassingEscapingBlock== on the class ==BlockClosure== as follows.
 
 [[[
-BlockClosure>>valuePassingEscapingBlock
-	  self value: [ ^nil ]
-]]]
-
-Then we define a simple ==assert:== method that raises an error if its argument is false.
-
-[[[
-BExp>>assert: aBoolean
-	aBoolean ifFalse: [Error signal]
+BlockClosure >> valuePassingEscapingBlock
+	  self value: [ ^ nil ]
 ]]]
 
 We define the following method.
 
 [[[
-BExp>>testValueWithExitBreak
+BExp >> testValueWithExitBreak
 	| val |
 	[ :break |
 	    1 to: 10 do: [ :i |
 			         val := i.
-			         i = 4 ifTrue: [ break value ] ] ] valuePassingEscapingBlock.
-	val traceCr.
-	self assert: val = 4.
+			         val = 4 ifTrue: [ break value ] ] ] valuePassingEscapingBlock.
+	Transcript show: 'Passed here!'.
+	self assert: val equals: 4
 ]]]
 
-This method defines a block whose argument ==break== is executed as soon as the step 4 of a loop is reached. A variable ==val== is then printed and we make sure that its value is 4. Executing ==BExp new testValueWithExitBreak== performs without raising an error and prints 4 to the Transcript: the loop has been stopped, the value has been printed, and the assert has been validated.
+This method defines a block whose argument ==break== is executed as soon as the step 4 of a loop is reached. 
+We make sure that its value is 4. 
+The test passes: the loop has been stopped, the 'Passed here!' is printed to the transcript and the assert is validated.
 
-If you change the ==valuePassingEscapingBlock== message sent by ==value: [^ nil]== in the ==testValueWithExitBreak== method above, you will not get the trace because the execution of the method ==testValueWithExitBreak== will exit when the block is executed. In this case, calling ==valuePassingEscapingBlock== is not equivalent to calling ==value: [^nil]== because the home context of the escaping block ==[ ^ nil ]== is different.  With the original ==valuePassingEscapingBlock==, the home context of the block ==[^ nil]==
+
+Now let us change the message ==valuePassingEscapingBlock== by ==value: [^ nil]== in the ==testValueWithExitBreak== method above, you will not get the halt because the execution of the method ==testValueWithExitBreak== will exit when the block is executed.
+In this case, calling ==valuePassingEscapingBlock== is not equivalent to calling ==value: [^nil]== because the home context of the escaping block ==[ ^ nil ]== is different.
+
+[[[
+BExp >> testValueWithExitBreak2
+	| val |
+	[ :break |
+	    1 to: 10 do: [ :i |
+			         val := i.
+			         val = 4 ifTrue: [ break value ] ] ] value: [^nil].
+	self halt.
+	self assert: val equals: 4
+]]]
+
+With the original ==valuePassingEscapingBlock==, the home context of the block ==[^ nil]==
 is ==valuePassingEscapingBlock== and not the method ==testValueWithExitContinue== itself.
-Therefore when executed, the escaping block will change the execution flow to the ==valuePassingEscapingBlock== message in the method ==testValueWithExitBreak== (similarly to the previous example where the flow came back just after the invocation of the ==defineBlock== message). Put a ==self halt== before the ==assert:== to convince you. In one case, you will reach the halt while in another case not.
+Therefore when executed, the escaping block will change the execution flow to the ==valuePassingEscapingBlock== message in the method ==testValueWithExitBreak== (similarly to the previous example where the flow came back just after the invocation of the ==defineBlock== message). 
+The ==self halt== before the ==assert:== will not be executed.
 
 !!!Non-local return blocks
 
  As a block is always executed in its home context, it is possible to attempt to return from a method execution which has already returned. This runtime error condition is trapped by the VM.
 
 [[[
-BExp>>returnBlock
+BExp >> returnBlock
 	^ [ ^ self ]
 
 BExp new returnBlock value ~-> Exception
