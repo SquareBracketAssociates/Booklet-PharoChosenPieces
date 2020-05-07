@@ -1,0 +1,9 @@
+
+On the implementation level, we copy all data into the block at execution time. For temps that are just read, we just copy them and
+store them in the context of the block, then all reads to that var read from there.
+
+For vars written, they are allocated in an array and we copy a reference to *that array* when the block is allocated and then we access
+the value via that indirection (so if we change it, other blocks that referent to the same var see the change).
+
+So that means: conceptional this is right, but it is a bit bad that the *implementation* does exactly here the opposite :-)
+
