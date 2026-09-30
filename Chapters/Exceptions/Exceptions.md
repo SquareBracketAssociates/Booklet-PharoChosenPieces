@@ -208,7 +208,7 @@ If any exception other than `FileStreamException` happens, the files are not pro
 
 ### Specifying which exceptions will be handled
 
-![A small part of the Pharo exception hierarchy](SimpleHierarchy)
+![A small part of the Pharo exception hierarchy](figures/SimpleHierarchy.pdf)
 
 In Smalltalk, exceptions are, of course, objects.
 
@@ -341,7 +341,7 @@ In Pharo, the class `MethodContext` (whose superclass is `ContextPart`) models t
 
 Suppose that we attempt to open a `FileStream` on a non-existent file from a `doIt`. A `FileDoesNotExistException` will be signaled, and the execution stack will contain `MethodContext`s for `doIt`, `oldFileNamed:`, and `signal`, as shown in the figure below.
 
-![A Pharo execution stack](Stack)
+![A Pharo execution stack. %width=80](figures/Stack.pdf)
 
 Since everything is an object in Smalltalk, we would expect method contexts to be objects. However, some Smalltalk implementations use the native **C** execution stack of the **virtual machine** to avoid creating objects all the time.
 
@@ -777,7 +777,7 @@ Utilities class>>>convertCRtoLF: fileName
 
 When the message `convertCRtoLF:` is sent, if the setting `raiseWarning` is `true`, then a pop-up window is displayed with a notification and the programmer may resume the application execution; this is shown in the following figure (Settings are explained in details in the *Settings* chapter).
 
-![Sending a deprecated message.](Deprecation)
+![Sending a deprecated message.](figures/Deprecation.png)
 
 Of course, since this method is deprecated you will not find it in current Pharo distributions. Look for another sender of `deprecated:on:in:`.
 
@@ -871,11 +871,11 @@ Process>>>debug: context title: title full: bool
 
 ### Specific exceptions
 
-The class `Exception` in Pharo has ten direct subclasses, as shown in [Figure: A part of Pharo exception hierarchy](#wholeHierarchy).
+The class `Exception` in Pharo has ten direct subclasses, as shown in Figure *@wholeHierarchy@*.
 
 The first thing that we notice from this figure is that the Exception hierarchy is a bit of a mess; you can expect to see some of the details change as Pharo is improved.
 
-![A part of Pharo exception hierarchy](ExceptionSubclasses)
+![A part of Pharo exception hierarchy %width=80&anchor=wholeHierarchy](figures/ExceptionSubclasses.pdf)
 
 The second thing that we notice is that there are two large sub-hierarchies: `Error` and `Notification`.
 Errors tell us that the program has fallen into some kind of abnormal situation.
@@ -940,9 +940,9 @@ When you write methods that signal exceptions, consider whether you should also 
 
 Although this technique can be used in any programming language that supports closures, because Smalltalk uses closures for *all* its control structures, it is a particularly natural one to use in Smalltalk.
 
-Another way of avoiding exception handling is to test the precondition of the exception before sending the message that may signal it. For example, in [Object>>performAll:](#objectPerformAll), we sent a message to an object using `perform:`, and handled the `MessageNotUnderstood` error that might ensue. A much simpler alternative is to check to see if the message is understood before executing the `perform:`.
+Another way of avoiding exception handling is to test the precondition of the exception before sending the message that may signal it. For example, in `Object>>performAll:`, we sent a message to an object using `perform:`, and handled the `MessageNotUnderstood` error that might ensue. A much simpler alternative is to check to see if the message is understood before executing the `perform:`.
 
-```smalltalk
+```anchor=performall
 Object>>performAll: selectorCollection
     selectorCollection
         do: [:each | (self respondsTo: each)
@@ -1019,7 +1019,7 @@ Note that you can also execute the following code:
 
 You obtain an explorer and you can see that the exception class and the handler are stored in the first and second variable instance variables of the method context object (a method context represents an execution stack element).
 
-![Explore a method context to find the exception class and the handler.](exception)
+![Explore a method context to find the exception class and the handler. %width=80](figures/exception.png)
 
 We see that `on:do:` execution stores the exception class and its handler on the method context. Note that this is not specific to `on:do:` but any message execution stores arguments on its corresponding context.
 
@@ -1276,7 +1276,7 @@ ContextPart>>resume: value through: firstUnwindContext
     ^value
 ```
 
-![Context stack](EnsureImpl)
+![Context stack %width=80&anchor=EnsureImpl](figures/EnsureImpl.pdf)
 
 This is the method where the argument block of `BlockClosure>>ensure:` is executed. This method looks for all the unwind contexts between the context of the method `ContextPart>>resume:` and self, which is the sender of the `BlockClosure>>on:do:` context (in our case the context of `Bexp>>start`). When the method finds an unwound context, the unwound block is executed. Lastly, it triggers the `terminateTo:` message.
 
@@ -1297,9 +1297,9 @@ ContextPart>>terminateTo: previousContext
 
 Basically, this method terminates all the contexts between `thisContext` and `self`, which is the sender of the `BlockClosure>>on:do:` context (in our case the context of `Bexp>>start`). Moreover, the sender of `thisContext` will become `self`, which is the sender of the `BlockClosure>>on:do:` context (in our case the context of `Bexp>>start`). It is implemented as a primitive for performance only, so the primitive is optional and the fallback code has the same behavior.
 
-Let's summarize what happens with [Figure: Context stack](#EnsureImpl) which represents the execution of the method `Bexp>>ensureWithOnDo` defined previously.
+Let's summarize what happens with *@EnsureImpl@* which represents the execution of the method `Bexp>>ensureWithOnDo` defined previously.
 
-![Legend of the figure](EnsureImplLegend)
+![Legend of the figure](figures/EnsureImplLegend.pdf)
 
 ### Ensuring a non local return
 
