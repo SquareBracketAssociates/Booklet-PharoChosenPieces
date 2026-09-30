@@ -81,14 +81,14 @@ The `BlockClosure>>ifCurtailed:` message is typically used for "cleaning" action
 In the following example, the receiver of `ifCurtailed:` performs an early return, so the following statement is never reached. In Smalltalk, this is referred to as a *non-local return*. Nevertheless, the argument block will be executed.
 
 ```smalltalk
-[^ 10] ifCurtailed: [Transcript show: 'We see this'].
+[ ^ 10 ] ifCurtailed: [ Transcript show: 'We see this' ].
 Transcript show: 'But not this'.
 ```
 
 In the following example, we can see clearly that the argument to `ifCurtailed:` is evaluated only when the receiver terminates abnormally.
 
 ```smalltalk
-[Error signal] ifCurtailed: [Transcript show: 'Abandoned'; cr].
+[ Error signal ] ifCurtailed: [ Transcript show: 'Abandoned'; cr ].
 Transcript show: 'Proceeded'; cr.
 ```
 
@@ -148,13 +148,13 @@ aBlock on: exceptionClass do: handlerAction
 The message `on:do:` returns the value of the receiver (the protected block), and when an error occurs it returns the value of the `handlerAction` block, as illustrated by the following expressions:
 
 ```smalltalk
-[1+2] on: ZeroDivide do: [:exception | 33] 
+[ 1+2 ] on: ZeroDivide do: [ :exception | 33 ] 
 --> 3
 
-[1/0] on: ZeroDivide do: [:exception | 33] 
+[ 1/0 ] on: ZeroDivide do: [ :exception | 33 ] 
 --> 33
 
-[1+2. 1+ 'kjhjkhjk'] on: ZeroDivide do: [:exception | 33] 
+[1+2. 1+ 'kjhjkhjk'] on: ZeroDivide do: [ :exception | 33 ] 
 --> raise another Error
 ```
 
@@ -208,9 +208,9 @@ If any exception other than `FileStreamException` happens, the files are not pro
 
 ### Specifying which exceptions will be handled
 
-![A small part of the Pharo exception hierarchy](figures/SimpleHierarchy.pdf)
+![A small part of the Pharo exception hierarchy. %width=80](figures/SimpleHierarchy.pdf)
 
-In Smalltalk, exceptions are, of course, objects.
+In Pharo, exceptions are, of course, objects.
 
 In Pharo, an exception is an instance of an exception class which is part of a hierarchy of exception classes. For example, because the exceptions `FileDoesNotExistException`, `FileExistsException` and `CannotDeleteFileException` are special kinds of `FileStreamException`, they are represented as subclasses of `FileStreamException`, as shown in the figure above.
 
@@ -250,11 +250,9 @@ Exception class>>>, anotherException
 The rest of the magic occurs in the class `ExceptionSet`, which has a surprisingly simple implementation.
 
 ```smalltalk
-Object subclass: #ExceptionSet
-	instanceVariableNames: 'exceptions'
-	classVariableNames: ''
-	poolDictionaries: ''
-	category: 'Exceptions-Kernel'
+Object << #ExceptionSet
+	slots: { #exceptions };
+	package: 'Exceptions-Kernel'
 
 ExceptionSet>>>initialize
 	super initialize.
@@ -756,7 +754,7 @@ Finally the last expression shows that errors are executed one by one from the c
 ```
 
 
-# Example: Deprecation
+### Example: Deprecation
 
 *Deprecation* offers a case study of a mechanism built using resumable exceptions.
 
@@ -794,11 +792,11 @@ However, it is necessary to override the implementation of `defaultAction`, beca
 
 ```smalltalk
 Deprecation>>>defaultAction
-	Log ifNotNil: [:log| log add: self].
+	Log ifNotNil: [ :log | log add: self ].
 	self showWarning  ifTrue:
-		[Transcript nextPutAll: self messageText; cr; flush].
+		[ Transcript nextPutAll: self messageText; cr; flush ].
 	self raiseWarning ifTrue:
-		[super defaultAction]
+		[ super defaultAction ]
 ```
 
 The first preference simply causes a warning message to be written on the `Transcript`. The second preference asks for an exception to be signaled, which is accomplished by super-sending `defaultAction`.
@@ -816,7 +814,7 @@ Object>>>deprecated: anExplanationString on: date in: version
 
 ### Example: Halt implementation
 
-As discussed in the Debugger chapter of *Pharo By Example*, the usual way of setting a *breakpoint* within a Smalltalk method is to insert the message-send `self halt` into the code. The method `Object>>halt`, implemented in `Object`, uses exceptions to open a debugger at the location of the breakpoint; it is defined as follows:
+Oneusual way of setting a *breakpoint* within a Pharo method is to insert the message-send `self halt` into the code. The method `Object>>halt`, implemented in `Object`, uses exceptions to open a debugger at the location of the breakpoint; it is defined as follows:
 
 ```smalltalk
 Object>>>halt
@@ -861,11 +859,11 @@ A few messages later, the debugger opens:
 ```smalltalk
 Process>>>debug: context title: title full: bool
 	^ Smalltalk tools debugger
-						openOn: self 
-						context: context 
-						label: title 
-						contents: nil 
-						fullView: bool.
+		openOn: self 
+		context: context 
+		label: title 
+		contents: nil 
+		fullView: bool
 ```
 
 
@@ -954,7 +952,7 @@ The primary objection to this implementation is efficiency. The implementation o
 Moreover, the first lookup is implemented in Smalltalk, not in the virtual machine. If this code is in a performance-critical loop, this might be an issue. However, if the collection of messages comes from a user interaction, the speed of `performAll:` will not be a problem.
 
 
-## Exceptions implementation
+### Exceptions implementation
 
 Up to now, we have presented the use of exceptions without really explaining in depth how they are implemented. Note that since you do not need to know how exceptions are implemented to use them, you can simply skip this section on the first reading. Now if you are curious and really want to know how they are implemented, this section is for you.
 
@@ -984,9 +982,7 @@ To get the answer, let's look at the definition of the class `MethodContext`, wh
 ```smalltalk
 ContextPart variableSubclass: #MethodContext
     instanceVariableNames: 'method closureOrNil receiver'
-    classVariableNames: ''
-    poolDictionaries: ''
-    category: 'Kernel-Methods'
+    package: 'Kernel-Methods'
 ```
 
 There is no instance variable here to store the exception class or the handler, nor is there any place in the superclass to store them.
